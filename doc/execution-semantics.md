@@ -1442,6 +1442,27 @@ Historical legacy interruption holds for conversational adapters no longer block
 
 The server projection remains available for diagnostics. Normal working, finishing, and interaction waits add no badges or cards to task lists or feeds. Active transcript headers keep saying Working during automatic retry and execution confirmation; attempts, causes, and recovery decisions belong in the run log. Recovery uses the existing transcript and run log rather than adding a reconciliation form. A cancelled run that never started says “Couldn't start” instead of implying that the agent answered.
 
+Native workspace export failures offer **Inspect recovery** on the run page.
+The explicit read lists recovery actions for that exact task and source run;
+selecting an action observes its current recorded-source identity. It includes
+resolved actions whose retained work may still need attention. This observation
+does not prove provider termination, local descriptor integrity, or successful
+file preservation, and it does not explain an earlier owner state retroactively.
+Recorded system recovery failures retain their original attempt and intent.
+New source-binding failures record a closed reason and, for a rejected lease
+policy, an allowlisted policy value. Neither detail includes paths, provider
+allocation identifiers, credentials, or raw provider errors.
+
+The company/task-authorized `GET /api/issues/{id}/recovery-actions` accepts
+`inspectSourceRunId` to list at most 20 matching actions and an optional
+`inspectSourceActionId` to inspect one exact action. This opt-in path bypasses
+read revalidation and performs no recovery writes, provider calls, filesystem
+inspection, or retries. It reads the existing source verifier without changing
+its guards. Inspection of more than eight recorded leases returns
+`not_inspected/source_limit` before per-lease lookup; physical recovery retains
+its existing acceptance rules. The observation spans multiple database reads
+and grants no execution or preservation authority.
+
 ### Codex startup and provider state
 
 Paperclip trusts the server-selected startup execution root in the isolated
