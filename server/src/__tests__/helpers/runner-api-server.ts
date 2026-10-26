@@ -7,7 +7,7 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { eq, sql } from "drizzle-orm";
-import { agents, authUsers, authAccounts, companies, companyMemberships, createDb, heartbeatRuns, issues, projects, projectWorkspaces, activityLog, issueComments, assets, goals, approvals, documents, documentRevisions, issueDocuments, issueRelations, issueThreadInteractions, connectionIntentDeliveries, toolApplications, toolConnections, toolConnectionInstalls, connectionGrants, toolCatalogEntries, toolProfiles, toolProfileBindings } from "@paperclipai/db";
+import { agents, authUsers, authAccounts, companies, companyMemberships, createDb, applyPendingMigrations, closeRegisteredClients, heartbeatRuns, issues, projects, projectWorkspaces, activityLog, issueComments, assets, goals, approvals, documents, documentRevisions, issueDocuments, issueRelations, issueThreadInteractions, connectionIntentDeliveries, toolApplications, toolConnections, toolConnectionInstalls, connectionGrants, toolCatalogEntries, toolProfiles, toolProfileBindings } from "@paperclipai/db";
 import { documentService } from "../../services/documents.js";
 import { connectionIntentService } from "../../services/connection-intents.js";
 import { initializeRunIdentity } from "../../services/run-identity.js";
@@ -26,9 +26,13 @@ export async function startRunnerApiTestServer(options: {
   deploymentMode?: "authenticated" | "local_trusted";
   authPublicBaseUrl?: string;
   humanSessions?: boolean;
+  databaseUrl?: string;
 } = {}) {
   const root = await mkdtemp(join(tmpdir(), "paperclip-api-eval-"));
-  const temporary = await startEmbeddedPostgresTestDatabase("paperclip-api-eval-db-");
+  const temporary = options.databaseUrl
+    ? { connectionString: options.databaseUrl, cleanup: () => closeRegisteredClients(options.databaseUrl!) }
+    : await startEmbeddedPostgresTestDatabase("paperclip-api-eval-db-");
+  if (options.databaseUrl) await applyPendingMigrations(options.databaseUrl);
   const db = createDb(temporary.connectionString);
   const storage = createStorageService(createLocalDiskStorageProvider(join(root, "storage")));
   const origin = options.authPublicBaseUrl ?? "http://127.0.0.1";

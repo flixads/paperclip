@@ -10,6 +10,7 @@ export type ConnectionManagementContext = {
   actor: AuthorizationActor;
   responsibleUserId: string | null;
   resource: ConnectionManagementResource;
+  workContext: { runId: string | null; issueId: string | null; projectId: string | null };
   decision: AuthorizationDecision;
   audit: Pick<LogActivityInput, "actorType" | "actorId" | "agentId" | "runId" | "agentApiKeyId" | "responsibleUserIdOverride" | "authorization">;
   reauthorize: (continuation?: { afterHumanAction: true }) => Promise<void>;
@@ -30,6 +31,7 @@ export function connectionManagementService(db: Db) {
     options: { targetAgentIds?: string[]; mutation?: boolean; afterHumanAction?: boolean; expandedProfile?: boolean; gatewayContextChecked?: boolean } = {},
   ): Promise<ConnectionManagementContext> {
     const responsibleUserId = responsibleConnectionUser(actor);
+    let workContext: ConnectionManagementContext["workContext"] = { runId: null, issueId: null, projectId: null };
     if (actor.type === "agent") {
       if (!responsibleUserId || !actor.agentId || actor.companyId !== resource.companyId) {
         throw forbidden("Connection management requires a responsible user in this company");
@@ -53,6 +55,7 @@ export function connectionManagementService(db: Db) {
         const snapshot = run.contextSnapshot ?? {};
         const issueId = run.issueId ?? (typeof snapshot.issueId === "string" ? snapshot.issueId : typeof snapshot.taskId === "string" ? snapshot.taskId : null);
         const [issue] = issueId ? await db.select().from(issues).where(and(eq(issues.id, issueId), eq(issues.companyId, resource.companyId))) : [];
+        workContext = { runId: run.id, issueId, projectId: issue?.projectId ?? null };
         if (issueId && (!issue || issue.assigneeAgentId !== actor.agentId || ["cancelled", "done"].includes(issue.status))) throw forbidden("Run no longer owns an eligible task");
         if (snapshot.paperclipSkillTest || issue?.workMode === "skill_test") throw forbidden("Skill tests cannot administer connections");
         if ((options.mutation ?? action !== "connections:read") && issue && issue.workMode !== "standard") throw forbidden("Connection changes are unavailable in Ask and Plan modes");
@@ -186,12 +189,16 @@ export function connectionManagementService(db: Db) {
     if (currentGatewayResource) {
       await authorize(actor, action, currentGatewayResource, { ...options, targetAgentIds: [...expandedTargets], expandedProfile: false, gatewayContextChecked: true });
     }
-    return {
-      actor, responsibleUserId, resource, decision: decision!,
+    const context: ConnectionManagementContext = {
+      actor, responsibleUserId, resource, workContext, decision: decision!,
       audit: { authorization: { action, operation: resource.operation, reason: decision!.reason }, actorType: actor.type === "agent" ? "agent" : "user", actorId: actor.type === "agent" ? actor.agentId! : actor.userId ?? "board",
         agentId: actor.agentId ?? null, runId: actor.runId ?? null, agentApiKeyId: actor.keyId ?? null, responsibleUserIdOverride: responsibleUserId },
-      reauthorize: async (continuation) => { await authorize(actor, action, resource, { ...options, afterHumanAction: continuation?.afterHumanAction ?? options.afterHumanAction }); },
+      reauthorize: async (continuation) => {
+        const current = await authorize(actor, action, resource, { ...options, afterHumanAction: continuation?.afterHumanAction ?? options.afterHumanAction });
+        context.workContext = current.workContext;
+      },
     };
+    return context;
   }
 
   async function capability(...args: Parameters<typeof authorize>) {

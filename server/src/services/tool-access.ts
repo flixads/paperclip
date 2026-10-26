@@ -3259,6 +3259,7 @@ export function toolAccessService(
       const companyTargets = lockedConnection.status !== "active" || !lockedConnection.enabled || (existingProfile && existingProfile.status !== "active")
         ? [{ targetType: "company", targetId: companyId }] : [];
       await lockToolAssignmentAgents(tx, companyId, [...existingBindings, ...bindingInputs, ...existingInstalls, ...companyTargets]);
+      await actor?.managementContext?.reauthorize();
       // A renamed connection can leave its old profile name in use. Resolve
       // names against profiles too, including when finalizing an installed draft.
       const otherProfiles = await tx

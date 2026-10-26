@@ -59,7 +59,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
         readOnly: req.method === "GET" && action !== "connections:gateway" && (action !== "connections:audit" || purpose === "chat") };
       const targets = new Set<string>();
       const extraResources: ConnectionManagementResource[] = [];
-      const selectors: Record<string, unknown>[] = [body, body.selectors ?? {}, ...(Array.isArray(body.entries) ? body.entries : [])];
+      const selectors: Record<string, unknown>[] = [body, body.access && typeof body.access === "object" ? body.access : {}, body.selectors ?? {}, ...(Array.isArray(body.entries) ? body.entries : [])];
       const bindCompany = (row: { companyId: string } | undefined) => {
         if (!row || (req.actor.type === "board" && !hasCompanyAccess(req, row.companyId))) throw notFound(inaccessibleMessage);
         if (companyId && companyId !== row.companyId) throw forbidden("Resource is outside this company");
@@ -180,6 +180,12 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
           if (!grants.some(grant => grant.subjectUserId === userId) && connection.createdByUserId !== userId) throw forbidden("Another user's personal account is not available for delegated management");
         }
       }
+      if (connectionId && operation === "POST /companies/:companyId/tools/apps/:connectionId/finish") {
+        const [profile] = await db.select({ id: toolProfiles.id }).from(toolProfiles).where(and(
+          eq(toolProfiles.companyId, companyId!), eq(toolProfiles.profileKey, `app:${resource.connectionId}`),
+        ));
+        profileId = profile?.id ?? profileId;
+      }
       if (profileId) {
         const [profile] = await db.select().from(toolProfiles).where(eq(toolProfiles.id, uuid(profileId)));
         bindCompany(profile); resource.profileId = profile.id;
@@ -208,7 +214,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       for (const install of Array.isArray(body.installs) ? body.installs : []) {
         if (install.targetType === "agent" && text(install.targetId)) targets.add(install.targetId);
       }
-      if ((operation.includes("ai-connection-pools") && req.method === "POST") || body.allAgents || body.targetType === "company" || body.installs?.some?.((install: { targetType: string }) => install.targetType === "company")) {
+      if ((operation.includes("ai-connection-pools") && req.method === "POST") || body.allAgents || body.access === "all_agents" || body.targetType === "company" || body.installs?.some?.((install: { targetType: string }) => install.targetType === "company")) {
         const companyAgents = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, companyId));
         companyAgents.forEach(agent => targets.add(agent.id));
       }
@@ -277,7 +283,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
         await management.authorize(req.actor, "connections:profiles", resource, { targetAgentIds: [...targets], mutation: req.method !== "GET" });
       }
       const changesAudience = req.actor.type === "agent" && req.method !== "GET" && action === "connections:configure" && (
-        ["allAgents", "agentIds", "assignedAgentId", "installs", "bindings", "ownership", "grantKind", "credentialPolicy"].some(key => Object.hasOwn(body, key)) ||
+        ["allAgents", "agentIds", "assignedAgentId", "installs", "bindings", "ownership", "grantKind", "credentialPolicy", "access"].some(key => Object.hasOwn(body, key)) ||
         operation.includes("ai-connection-pools"));
       if (changesAudience) await management.authorize(req.actor, "connections:profiles", resource, { targetAgentIds: [...targets] });
       const authorizeReferenced = async (afterHumanAction?: boolean) => {

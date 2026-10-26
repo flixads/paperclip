@@ -339,6 +339,7 @@ export interface ToolGatewaySession {
   runId: string | null;
   issueId: string | null;
   projectId: string | null;
+  originatingAgentId?: string | null;
   gatewayId?: string | null;
   gatewayPublicId?: string | null;
   gatewayName?: string | null;
@@ -2794,6 +2795,7 @@ export function createToolGatewayService(
       idempotencyKey: input.idempotencyKey,
       consumeRateLimit: input.consumeRateLimit,
       heartbeatRunId: input.session.runId,
+      originatingAgentId: input.session.originatingAgentId,
       issueId: input.session.issueId,
       projectId: input.session.projectId,
       gatewayId: input.session.gatewayId ?? null,
@@ -2810,6 +2812,7 @@ export function createToolGatewayService(
     idempotencyKey?: string | null;
     consumeRateLimit?: boolean;
     heartbeatRunId?: string | null;
+    originatingAgentId?: string | null;
     issueId?: string | null;
     projectId?: string | null;
     gatewayId?: string | null;
@@ -2826,6 +2829,7 @@ export function createToolGatewayService(
       },
       runContext: {
         heartbeatRunId: input.heartbeatRunId ?? null,
+        originatingAgentId: input.originatingAgentId ?? null,
         issueId: input.issueId ?? null,
         projectId: input.projectId ?? null,
         gatewayId: input.gatewayId ?? null,
@@ -7411,8 +7415,9 @@ export function createToolGatewayService(
   function isTestOriginInvocation(
     invocation: typeof toolInvocations.$inferSelect,
   ): boolean {
+    if (invocation.policyExplanation?.delegatedConnectionTest) return invocation.connectionId !== null && invocation.gatewayId === null;
     return (
-      (invocation.actorType === "user" || Boolean(invocation.policyExplanation?.delegatedConnectionTest)) &&
+      invocation.actorType === "user" &&
       invocation.runId === null &&
       invocation.issueId === null &&
       invocation.gatewayId === null &&
@@ -7440,6 +7445,7 @@ export function createToolGatewayService(
     matchedPolicyIds: string[];
     timeoutMs?: number;
     signal?: AbortSignal;
+    managementContext?: ConnectionManagementContext;
   }): Promise<
     | { decision: "allowed"; invocationId: string; result: unknown }
     | {
@@ -7460,8 +7466,8 @@ export function createToolGatewayService(
       session: args.session,
       companyId: args.companyId,
       agentId: args.agentId,
-      runId: null,
-      issueId: null,
+      runId: args.session.runId,
+      issueId: args.session.issueId,
       actorType: args.session.actorType,
       actorId: args.session.actorId ?? args.userId,
       action: "tool_gateway.call_allowed",
@@ -7479,6 +7485,14 @@ export function createToolGatewayService(
 
     const startedAt = Date.now();
     try {
+      await args.managementContext?.reauthorize();
+      if (args.managementContext?.actor.type === "agent") {
+        Object.assign(args.session, args.managementContext.workContext);
+        const current = await policyService.decide(policyInputForTool({ session: args.session, tool: args.tool, parameters: args.parameters }));
+        if (!current.allowed && !(args.session.approvedInvocationId && current.decision === "require_approval")) {
+          throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
+        }
+      }
       const executionTimeoutMs = timeoutMs(args.timeoutMs, args.tool);
       const connectedMcpExecution =
         (args.tool.providerType === "mcp_remote_http" || args.tool.providerType === "provider_rest")
@@ -7515,7 +7529,7 @@ export function createToolGatewayService(
         value: result,
         direction: "result",
         sensitiveMode: "redact",
-        promptInjectionMode: "block", classifier: resultClassifier(args.session, args.tool, args.invocationId, { signal: args.signal }),
+        promptInjectionMode: "block", classifier: resultClassifier(args.session, args.tool, args.invocationId, { signal: args.signal, approvedAction: Boolean(args.session.approvedInvocationId) }),
       });
       const providerResult = asRecord(resultValidation.value);
       if (providerResult?.error) {
@@ -7555,8 +7569,8 @@ export function createToolGatewayService(
         session: args.session,
         companyId: args.companyId,
         agentId: args.agentId,
-        runId: null,
-        issueId: null,
+        runId: args.session.runId,
+        issueId: args.session.issueId,
         actorType: args.session.actorType,
         actorId: args.session.actorId ?? args.userId,
         action: "tool_gateway.call_completed",
@@ -7634,8 +7648,8 @@ export function createToolGatewayService(
         session: args.session,
         companyId: args.companyId,
         agentId: args.agentId,
-        runId: null,
-        issueId: null,
+        runId: args.session.runId,
+        issueId: args.session.issueId,
         actorType: args.session.actorType,
         actorId: args.session.actorId ?? args.userId,
         action:
@@ -7703,6 +7717,7 @@ export function createToolGatewayService(
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS),
     };
+    let managementContext: ConnectionManagementContext | undefined;
     let tool: ToolGatewayDescriptor | undefined;
     try {
       tool = (
@@ -7746,17 +7761,17 @@ export function createToolGatewayService(
     })).summary;
     try {
       if (delegated) {
-        await connectionManagementService(db).authorize({ type: "agent", companyId: invocation.companyId,
+        managementContext = await connectionManagementService(db).authorize({ type: "agent", companyId: invocation.companyId,
           agentId: delegated.agentId, onBehalfOfUserId: delegated.responsibleUserId,
           runId: delegated.runId, keyId: delegated.keyId,
-        }, "connections:test", delegated.resource, { targetAgentIds: [agentId] });
-        const current = await policyService.decide(policyInputForAgentTool({
-          companyId: invocation.companyId, agentId, actorType: "agent", actorId: delegated.agentId, tool, parameters,
-        }));
+        }, "connections:test", delegated.resource, { targetAgentIds: [agentId], afterHumanAction: true });
+        Object.assign(session, managementContext.workContext, { originatingAgentId: delegated.agentId, approvedInvocationId: invocation.id });
+        const current = await policyService.decide(policyInputForTool({ session, tool, parameters }));
         if (!current.allowed && current.decision !== "require_approval") throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
       }
-      await runTestToolInvocation({
+      const outcome = await runTestToolInvocation({
         session,
+        managementContext,
         tool,
         parameters,
         invocationId: invocation.id,
@@ -7769,7 +7784,8 @@ export function createToolGatewayService(
       });
       await reflectToolActionInteractionLifecycle({
         actionRequestId,
-        status: "executed",
+        status: "error" in outcome ? "failed" : "executed",
+        ...("error" in outcome ? { errorCode: outcome.error.reasonCode, errorMessage: outcome.error.message } : {}),
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -9497,9 +9513,10 @@ export function createToolGatewayService(
         token: "test-call",
         companyId: input.companyId,
         agentId: input.agentId,
-        runId: null,
-        issueId: null,
-        projectId: null,
+        runId: input.managementContext?.workContext.runId ?? null,
+        issueId: input.managementContext?.workContext.issueId ?? null,
+        projectId: input.managementContext?.workContext.projectId ?? null,
+        originatingAgentId: actingAgentId,
         actorType: actingAgentId ? "agent" : "user",
         actorId: actingAgentId ?? input.userId,
         responsibleUserId: input.userId,
@@ -9539,11 +9556,8 @@ export function createToolGatewayService(
         sensitiveMode: "redact",
         promptInjectionMode: "ignore",
       });
-      const decisionInput = policyInputForAgentTool({
-        companyId: input.companyId,
-        agentId: input.agentId,
-        actorType: actingAgentId ? "agent" : "user",
-        actorId: actingAgentId ?? input.userId,
+      const decisionInput = policyInputForTool({
+        session,
         tool,
         parameters: requestedParameters,
         idempotencyKey: `test-call:${randomUUID()}`,
@@ -9671,8 +9685,8 @@ export function createToolGatewayService(
           session,
           companyId: input.companyId,
           agentId: input.agentId,
-          runId: null,
-          issueId: null,
+          runId: session.runId,
+          issueId: session.issueId,
           actorType: actingAgentId ? "agent" : "user",
           actorId: actingAgentId ?? input.userId,
           action: "tool_gateway.approval_requested",
@@ -9703,8 +9717,8 @@ export function createToolGatewayService(
           session,
           companyId: input.companyId,
           agentId: input.agentId,
-          runId: null,
-          issueId: null,
+          runId: session.runId,
+          issueId: session.issueId,
           actorType: actingAgentId ? "agent" : "user",
           actorId: actingAgentId ?? input.userId,
           action: "tool_gateway.call_denied",
@@ -9733,6 +9747,7 @@ export function createToolGatewayService(
       await input.managementContext?.reauthorize();
       return runTestToolInvocation({
         session,
+        managementContext: input.managementContext,
         tool,
         parameters: requestedParameters,
         invocationId,

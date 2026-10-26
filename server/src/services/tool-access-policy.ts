@@ -992,6 +992,10 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       agentId = agent.id;
     }
 
+    const originatingAgentId = input.runContext?.originatingAgentId;
+    if (originatingAgentId && (input.actor.actorType !== "agent" || input.actor.actorId !== originatingAgentId)) {
+      return { ok: false, redaction, decision: decision("deny", "deny_run_context_mismatch", "Run origin does not match the authenticated actor.", [], [], { redactionPlan: redaction.redactionPlan }) };
+    }
     if (heartbeatRunId) {
       const runId = heartbeatRunId;
       const [run] = await cachedRead(cache, `run:${runId}`, async () =>
@@ -1005,10 +1009,10 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
           })
           .from(heartbeatRuns)
           .where(eq(heartbeatRuns.id, runId)));
-      if (!run || run.companyId !== input.companyId || (input.actor.actorType === "agent" && run.agentId !== agentId)) {
+      if (!run || run.companyId !== input.companyId || (input.actor.actorType === "agent" && run.agentId !== (originatingAgentId ?? agentId))) {
         return { ok: false, redaction, decision: decision("deny", "deny_run_context_mismatch", "Supplied run context does not match the authenticated actor.", [], [], { redactionPlan: redaction.redactionPlan }) };
       }
-      agentId = run.agentId;
+      agentId = originatingAgentId ? agentId : run.agentId;
       const runIssueId = nonBlankString(run.issueId);
       const runProjectId = nonBlankString(run.projectId);
       const runRoutineId = nonBlankString(run.routineId);

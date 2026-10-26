@@ -1,14 +1,16 @@
 import { SLACK_CHAT_BOT_SCOPES, SLACK_BOT_TOOL_SCOPES } from "@paperclipai/shared";
 import { randomUUID, generateKeyPairSync } from "node:crypto";
 import { join } from "node:path";
+import { createServer } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { activityLog, agentApiKeys, companies, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGatewayTokens, plugins } from "@paperclipai/db";
+import { activityLog, agentApiKeys, companies, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins } from "@paperclipai/db";
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { startRunnerApiTestServer } from "./helpers/runner-api-server.js";
+import { getServerAdapter, registerServerAdapter, unregisterServerAdapter } from "../adapters/index.js";
 import { configureAgentLifecycle } from "../services/agent-lifecycle.js";
 import { agentService } from "../services/agents.js";
 import { accessService } from "../services/access.js";
@@ -37,7 +39,7 @@ describe("connection management with production default agents", () => {
       if (provider) return provider(url, init);
       throw new Error("Unexpected external request in provider fixture");
     });
-    server = await startRunnerApiTestServer({ authPublicBaseUrl: "https://paperclip.fixture.invalid", humanSessions: true });
+    server = await startRunnerApiTestServer({ authPublicBaseUrl: "https://paperclip.fixture.invalid", humanSessions: true, databaseUrl: process.env.PAPERCLIP_CONNECTION_MANAGEMENT_TEST_DATABASE_URL });
     lifecycle = configureAgentLifecycle(server.db, { requiredPluginIds: async () => [], runPlugin: async () => "complete", runHost: async () => "complete" });
     vi.stubEnv("PAPERCLIP_SECRETS_MASTER_KEY_FILE", join(server.root, "master.key"));
     await instanceSettingsService(server.db).updateExperimental({ enableChatConnectors: true, enableGitHubReviewBots: true });
@@ -90,6 +92,96 @@ describe("connection management with production default agents", () => {
     })]));
     const profile = await f.request("POST", `/companies/${f.companyId}/tools/profiles`, { profileKey: "fixture-profile", name: "Fixture profile", defaultAction: "deny", entries: [] });
     expect(profile, JSON.stringify(profile)).toMatchObject({ status: 201 });
+  });
+
+  it("checks finish access, all-agent sharing, and retained targets against both management grants", async () => {
+    const f = await fixture();
+    const connection = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Finish authority", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
+    const path = `/companies/${f.companyId}/tools/apps/${connection.body.id}/finish`;
+    const body = { enabledCatalogEntryIds: [], askFirstCatalogEntryIds: [], access: { agentIds: [f.agentId] } };
+    expect(await f.request("POST", path, body)).toMatchObject({ status: 200 });
+    await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_profiles")));
+    for (const access of [body.access, { agentIds: [] }, "all_agents"]) expect(await f.request("POST", path, { ...body, access })).toMatchObject({ status: 403 });
+    await server.db.insert(principalPermissionGrants).values({ companyId: f.companyId, principalType: "agent", principalId: f.agentId, permissionKey: "tools:manage_profiles", scope: { targetAgentIds: [f.agentId] } });
+    expect(await f.request("POST", path, { ...body, access: "all_agents" })).toMatchObject({ status: 403 });
+    const [other] = await server.db.select({ id: agents.id }).from(agents).where(and(eq(agents.companyId, f.companyId), eq(agents.name, "Eval agent")));
+    const targets = await server.db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, f.companyId));
+    const otherId = other?.id ?? targets.find(agent => agent.id !== f.agentId)!.id;
+    expect(await f.request("POST", path, { ...body, access: { agentIds: [otherId] } })).toMatchObject({ status: 403 });
+    await server.db.update(principalPermissionGrants).set({ scope: null }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_profiles")));
+    await server.db.update(principalPermissionGrants).set({ scope: { targetAgentIds: [f.agentId] } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "agents:configure")));
+    expect(await f.request("POST", path, { ...body, access: { agentIds: [otherId] } })).toMatchObject({ status: 403 });
+    const bindings = await server.db.select().from(toolProfileBindings).where(eq(toolProfileBindings.companyId, f.companyId));
+    expect(bindings.map(binding => binding.targetId)).toEqual([f.agentId]);
+  });
+
+  it.each(["none", "other-agent", "agent", "user", "cancelled", "project-block"] as const)("keeps delegated test policy and approval continuation bounded (%s)", async revocation => {
+    const f = await fixture();
+    let targetAgentId = f.agentId;
+    if (revocation === "other-agent") {
+      const cookie = await server.humanSession(f.userId);
+      const created = await fetch(`${server.apiUrl}/api/companies/${f.companyId}/agents`, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Test target", role: "engineer", adapterType: "paperclip_runner", adapterConfig: { provider: "codex" }, permissions: {}, runtimeConfig: { heartbeat: { enabled: false, wakeOnDemand: false } } }) });
+      const target = await created.json();
+      expect(created.status, JSON.stringify(target)).toBe(201);
+      targetAgentId = target.id;
+      await lifecycle.process(targetAgentId);
+      await vi.waitFor(async () => expect((await agentService(server.db).getById(targetAgentId))?.status).toBe("idle"));
+    }
+    const allowed = revocation === "none" || revocation === "other-agent";
+    let calls = 0;
+    const remote = createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const request = JSON.parse(Buffer.concat(chunks).toString() || "{}");
+      let result: unknown;
+      if (request.method === "initialize") result = { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "Fixture", version: "1" } };
+      else if (request.method === "tools/call") { calls++; result = { content: [{ type: "text", text: "Fixture result" }] }; }
+      else { res.writeHead(req.method === "DELETE" ? 204 : request.method === "notifications/initialized" ? 202 : 405); res.end(); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: request.id, result }));
+    });
+    await new Promise<void>(resolve => remote.listen(0, "127.0.0.1", resolve));
+    const address = remote.address();
+    if (!address || typeof address === "string") throw new Error("Fixture did not listen");
+    const mcpUrl = `http://127.0.0.1:${address.port}/mcp`;
+    try {
+      const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Governed test", transport: "mcp_remote", authKind: "none", transportConfig: { url: mcpUrl } });
+      await server.db.update(toolConnections).set({ healthStatus: "ok" }).where(eq(toolConnections.id, created.body.id));
+      const [entry] = await server.db.insert(toolCatalogEntries).values({ companyId: f.companyId, applicationId: created.body.applicationId, connectionId: created.body.id,
+        entryKind: "tool", name: "Fixture probe", toolName: "fixture_probe", inputSchema: { type: "object", properties: {} }, riskLevel: "read", isReadOnly: true, status: "active", versionHash: "fixture-v1" }).returning();
+      expect(await f.request("POST", `/companies/${f.companyId}/tools/apps/${created.body.id}/finish`, { enabledCatalogEntryIds: [entry.id], access: { agentIds: [targetAgentId] } })).toMatchObject({ status: 200 });
+      const path = `/tool-connections/${created.body.id}/test-calls`;
+      const body = { agentId: targetAgentId, runContext: { heartbeatRunId: randomUUID(), issueId: randomUUID(), projectId: randomUUID() }, toolName: "fixture_probe", parameters: {} };
+      for (const selectors of [{ connectionId: created.body.id, projectId: f.projectId }, { connectionId: created.body.id, issueId: f.issueId }]) {
+        const [block] = await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "Scoped test block", policyType: "block", selectors, priority: 1 }).returning();
+        expect(await f.request("POST", path, body, f.jwt)).toMatchObject({ status: 200, body: { decision: "off" } });
+        expect(calls).toBe(0);
+        await server.db.delete(toolPolicies).where(eq(toolPolicies.id, block.id));
+      }
+      await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "Scoped test approval", policyType: "require_approval", selectors: { connectionId: created.body.id, issueId: f.issueId }, priority: 1 });
+      const pending = await f.request("POST", path, body, f.jwt);
+      expect(pending, JSON.stringify(pending)).toMatchObject({ status: 200, body: { decision: "ask_first" } });
+      const [saved] = await server.db.select().from(toolInvocations).where(eq(toolInvocations.id, pending.body.invocationId));
+      expect(saved).toMatchObject({ runId: f.runId, issueId: f.issueId, actorType: "agent", actorId: f.agentId, agentId: targetAgentId });
+      expect(calls).toBe(0);
+      const approvalPath = `/tool-gateway/action-requests/${pending.body.actionRequestId}/approve`;
+      expect(await f.request("POST", approvalPath, { companyId: f.companyId }, f.jwt)).toMatchObject({ status: 403 });
+      await server.db.update(heartbeatRuns).set({ status: "succeeded" }).where(eq(heartbeatRuns.id, f.runId));
+      if (revocation === "agent") await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:use")));
+      if (revocation === "user") for (const permission of ["tools:use", "tools:manage_connections"]) await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.companyId, f.companyId), eq(principalPermissionGrants.principalId, f.userId), eq(principalPermissionGrants.permissionKey, permission)));
+      if (revocation === "cancelled") await server.db.update(issues).set({ status: "cancelled" }).where(eq(issues.id, f.issueId));
+      if (revocation === "project-block") await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "New project block", policyType: "block", selectors: { connectionId: created.body.id, projectId: f.projectId }, priority: 0 });
+      const cookie = await server.humanSession(f.userId);
+      const approve = () => fetch(server.apiUrl + "/api" + approvalPath, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" }, body: JSON.stringify({ companyId: f.companyId }) });
+      const response = await approve();
+      expect(response.status, JSON.stringify(await response.json())).toBe(revocation === "cancelled" ? 409 : 200);
+      const [settled] = await server.db.select().from(toolInvocations).where(eq(toolInvocations.id, saved.id));
+      if (revocation === "cancelled") expect(settled.status).not.toBe("succeeded");
+      else expect(settled, JSON.stringify(settled)).toMatchObject({ status: allowed ? "succeeded" : "failed" });
+      expect(calls).toBe(allowed ? 1 : 0);
+      if (allowed) { expect((await approve()).status).toBe(200); expect(calls).toBe(1); }
+    } finally { remote.closeAllConnections(); await new Promise<void>((resolve, reject) => remote.close(error => error ? reject(error) : resolve())); }
   });
 
   it("hands generic app authentication to the saved setup without creating agent-bound OAuth state", async () => {
@@ -366,6 +458,7 @@ describe("connection management with production default agents", () => {
       if (url === "https://api.openai.com/v1/models") return Response.json({ data: [] });
       throw new Error("Unexpected AI fixture request");
     };
+    registerServerAdapter({ ...getServerAdapter("paperclip_runner"), testEnvironment: async () => ({ adapterType: "paperclip_runner", status: "pass", checks: [], testedAt: new Date().toISOString() }) });
     try {
       const account = await f.request("POST", `/companies/${f.companyId}/ai-connections`, { provider: "openai", method: "api_key", name: "Fixture OpenAI", ownership: "personal", apiKey: "fixture-secret-do-not-return", agentIds: [f.agentId] });
       expect(account, JSON.stringify(account)).toMatchObject({ status: 201 });
@@ -393,7 +486,7 @@ describe("connection management with production default agents", () => {
       expect(await f.request("DELETE", `/companies/${f.companyId}/ai-connection-pools/${pool.body.id}`, { expectedRevision: 2 })).toMatchObject({ status: 200 });
       await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_profiles")));
       expect(await f.request("POST", `/companies/${f.companyId}/ai-connections`, { provider: "openai", method: "api_key", name: "No sharing authority", ownership: "personal", apiKey: "fixture-secret", agentIds: [f.agentId] })).toMatchObject({ status: 403 });
-    } finally { provider = null; }
+    } finally { provider = null; unregisterServerAdapter("paperclip_runner"); }
   });
 
   it("reuses a saved chat authentication request and resumes only while its authority remains valid", async () => {
