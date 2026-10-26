@@ -158,11 +158,11 @@ Review: `operation-reviewed`.
 ### `get-mcp-gateways`
 
 API: `present` — `GET /mcp/gateways/{gatewayPublicId}`; browser/provider/MCP protocol.
-Agent access: `available` — existing authenticated MCP/provider protocol; not callable as JSON REST.
-Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Agent access: `restricted` — GET always returns HTTP 405 with `Allow: POST`. Use the corresponding POST MCP operation.
+Policy: GET streaming is unsupported; this is a transport boundary independent of principal permissions. POST still requires the documented MCP authentication and resource policy.
 Evidence: `source-only` — [route](../../server/src/routes/tool-gateway.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Verification: `not-run` — source-reviewed fixed 405 handler. A protocol check should assert status 405 and `Allow: POST`; use POST to exercise authenticated MCP calls.
+Gaps: No GET event stream is implemented. This entry does not advertise a usable GET client connection.
 
 ### `post-mcp-gateways`
 
@@ -176,11 +176,11 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 ### `get-tool-gateway-gateways-mcp`
 
 API: `present` — `GET /api/tool-gateway/gateways/{gatewayId}/mcp`; browser/provider/MCP protocol.
-Agent access: `available` — existing authenticated MCP/provider protocol; not callable as JSON REST.
-Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Agent access: `restricted` — GET always returns HTTP 405 with `Allow: POST`. Use the corresponding POST MCP operation.
+Policy: GET streaming is unsupported; this is a transport boundary independent of principal permissions. POST still requires the documented MCP authentication and resource policy.
 Evidence: `source-only` — [route](../../server/src/routes/tool-gateway.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Verification: `not-run` — source-reviewed fixed 405 handler. A protocol check should assert status 405 and `Allow: POST`; use POST to exercise authenticated MCP calls.
+Gaps: No GET event stream is implemented. This entry does not advertise a usable GET client connection.
 
 ### `post-tool-gateway-gateways-mcp`
 

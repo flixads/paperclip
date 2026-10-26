@@ -507,27 +507,27 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 API: `present` — `GET /api/companies/{companyId}/adapters/{type}/login-sessions/active`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/agents.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts), with a saved database session and deterministic registered adapter capability.
+Verification: `passed` — actual persistent-key/run-JWT management reads, cancellation, and denial for another saved owner. Session ownership is the responsible human; no device provider or sandbox process was launched in this fixture.
+Gaps: Live device authentication remains unqualified. The start route retains strict managed-account, approved adapter command, sandbox, and provider availability checks; human consent completes authentication.
 
 ### `get-companies-adapters-login-sessions`
 
 API: `present` — `GET /api/companies/{companyId}/adapters/{type}/login-sessions/{sessionId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/agents.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts), with a saved database session and deterministic registered adapter capability.
+Verification: `passed` — actual persistent-key/run-JWT management reads, cancellation, and denial for another saved owner. Session ownership is the responsible human; no device provider or sandbox process was launched in this fixture.
+Gaps: Live device authentication remains unqualified. The start route retains strict managed-account, approved adapter command, sandbox, and provider availability checks; human consent completes authentication.
 
 ### `post-companies-adapters-login-sessions-cancel`
 
 API: `present` — `POST /api/companies/{companyId}/adapters/{type}/login-sessions/{sessionId}/cancel`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/agents.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts), with a saved database session and deterministic registered adapter capability.
+Verification: `passed` — actual persistent-key/run-JWT management reads, cancellation, and denial for another saved owner. Session ownership is the responsible human; no device provider or sandbox process was launched in this fixture.
+Gaps: Live device authentication remains unqualified. The start route retains strict managed-account, approved adapter command, sandbox, and provider availability checks; human consent completes authentication.
 
 ### `post-agents-claude-login`
 
