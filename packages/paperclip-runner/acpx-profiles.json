@@ -32,12 +32,12 @@
       "requiresProviderPolicy": true
     },
     "copilot": {
-      "agentProfileVersion": 62,
+      "agentProfileVersion": 63,
       "agentServerPackage": "@github/copilot",
       "agentServerVersion": "1.0.88",
       "agentRuntimePackage": null,
       "agentRuntimeVersion": null,
-      "commandDigest": "sha256:aeeb80bc186569c78911aeaa445c1fdf5e81420cfeadb563d5620497c58dd0f4",
+      "commandDigest": "sha256:3ca9ffc81abda9733eadfcf61ed37cdc6fe80251de744f33bdc8be73ab3e9170",
       "requiresProviderPolicy": true
     },
     "claude": {

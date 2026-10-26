@@ -14812,8 +14812,8 @@ it("keeps an ACPX missing runtime package failure actionable and stops automatic
 });
 describe("HTTP Stop during remote runner staging", () => {
   it("does not dispatch after Stop and bounded bootstrap cleanup", async () => {
-    const { createCapabilityRunnerdCodexTransport } = await import("../../../../packages/paperclip-runner/src/live/runnerd-codex-transport.js");
-    const { createRunnerdNativeSessionBackend } = await import("../../../../packages/paperclip-runner/src/backends/codex-native-backend.js");
+    const { createCapabilityRunnerdCodexTransport } = await import("@paperclipai/paperclip-runner/live");
+    const { createNativeSessionBackend } = await import("@paperclipai/paperclip-runner");
 
     vi.spyOn(runEventWriter, "appendHeartbeatRunEvent").mockResolvedValue({ row: { seq: 1 }, disposition: "committed", highestContiguousSourceSeq: 1 } as never);
     const root = await mkdtemp(join(tmpdir(), "remote-startup-stop-"));
@@ -14842,7 +14842,11 @@ describe("HTTP Stop during remote runner staging", () => {
       controlPlaneRegistration: async authority => { await authority.start(); return { connectUrl: authority.connectUrl, release: async () => { await authority.stop(); } }; },
     });
     const dbModule = await import("@paperclipai/db");
-    const temporary = await dbModule.startEmbeddedPostgresTestDatabase("remote-staging-http-");
+    const { resolveExternalTestDatabaseUrl } = await import("../../__tests__/helpers/external-test-database.js");
+    const externalUrl = resolveExternalTestDatabaseUrl("PAPERCLIP_TEST_DATABASE_URL");
+    const temporary = externalUrl
+      ? { connectionString: externalUrl, cleanup: () => dbModule.closeRegisteredClients(externalUrl) }
+      : await dbModule.startEmbeddedPostgresTestDatabase("remote-staging-http-");
     const httpDb = dbModule.createDb(temporary.connectionString);
     const localExecution = { ...execution, binding: { ...execution.binding,
       companyId: randomUUID(), agentId: randomUUID(), issueId: randomUUID(), runId: randomUUID(), executionWorkspaceId: randomUUID() },
@@ -14866,11 +14870,11 @@ describe("HTTP Stop during remote runner staging", () => {
     app.use("/api", agentRoutes(httpDb));
     app.use((error: Error, _req: unknown, _res: unknown, next: (error: Error) => void) => { httpErrors.push(error.stack ?? String(error)); next(error); });
     app.use(errorHandler);
-    const backend = createRunnerdNativeSessionBackend(localExecution, { transportFactory: () => bundle.transport, runnerInstanceId: "runner", workingDirectoryAuthority: "remote_runner", environment: { PAPERCLIP_WORKSPACE_CWD: root, PATH: process.env.PATH } });
+    const backend = createNativeSessionBackend(localExecution, { codexTransportFactory: () => bundle.transport, runnerInstanceId: "runner", workingDirectoryAuthority: "remote_runner", environment: { PAPERCLIP_WORKSPACE_CWD: root, PATH: process.env.PATH } });
     // Execute real startup and transport code. The execution lease/event sink
     // are controlled ports; HTTP cancellation uses a fresh PostgreSQL database.
     state.execute.mockReset().mockImplementationOnce(options => executeNativeSession({ ...options, timeoutMs: 1000,
-      controlPlane: { async openRun() {}, async checkpointSession() {}, async appendEvent(event) { return { cursor: event.sourceSeq, highestContiguousSourceSeq: event.sourceSeq, disposition: "committed" as const }; }, async replayEvents() { return { events: [], highestContiguousSourceSeq: 0 }; }, async completeRun() {} },
+      controlPlane: { async openRun() {}, async checkpointSession() {}, async appendEvent(event) { const sequence = "sourceSeq" in event ? event.sourceSeq : event.sequence; return { cursor: sequence, highestContiguousSourceSeq: sequence, disposition: "committed" as const }; }, async replayEvents() { return { events: [], highestContiguousSourceSeq: 0 }; }, async completeRun() {} },
     }));
     const outcome = executePaperclipNativeSession({ db: leaseDb(localExecution), execution: localExecution, runnerInstanceId: "runner", backend, useRunnerd: false }).catch(error => error);
 
