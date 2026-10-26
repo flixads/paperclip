@@ -799,6 +799,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       throw badRequest("policyIds must not contain duplicates");
     }
 
+    await managementContext?.reauthorize();
     return db.transaction(async (tx) => {
       const rows = await tx
         .select()
@@ -821,7 +822,6 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
         });
       }
 
-      await managementContext?.reauthorize();
       const now = new Date();
       await tx.execute(sql`UPDATE tool_policies
         SET priority = (requested.ordinality * 100)::integer, updated_at = ${now.toISOString()}
@@ -1384,8 +1384,10 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       status: toolInvocations.status, policyDecision: toolInvocations.policyDecision, approvalState: toolInvocations.approvalState,
       policyExplanation: toolInvocations.policyExplanation,
     }).from(toolInvocations).where(and(eq(toolInvocations.companyId, ctx.companyId), eq(toolInvocations.id, invocationId)));
-    const authorized = invocation && invocation.status === "executing"
-      && (invocation.policyDecision === "allow" || (invocation.policyDecision === "require_approval" && invocation.approvalState === "approved"))
+    const authorized = invocation && (
+      (invocation.status === "executing" && (invocation.policyDecision === "allow" || (invocation.policyDecision === "require_approval" && invocation.approvalState === "approved")))
+      || (invocation.status === "awaiting_approval" && invocation.policyDecision === "require_approval" && ["pending", "approved"].includes(invocation.approvalState))
+    )
       && invocation.actorType === ctx.actorType && invocation.actorId === ctx.actorId && invocation.agentId === ctx.agentId
       && invocation.runId === ctx.heartbeatRunId && invocation.issueId === ctx.issueId && invocation.gatewayId === ctx.gatewayId
       && invocation.applicationId === ctx.applicationId && invocation.connectionId === ctx.connectionId

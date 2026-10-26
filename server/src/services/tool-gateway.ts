@@ -7766,7 +7766,7 @@ export function createToolGatewayService(
           runId: delegated.runId, keyId: delegated.keyId,
         }, "connections:test", delegated.resource, { targetAgentIds: [agentId], afterHumanAction: true });
         Object.assign(session, managementContext.workContext, { originatingAgentId: delegated.agentId, approvedInvocationId: invocation.id });
-        const current = await policyService.decide(policyInputForTool({ session, tool, parameters }));
+        const current = await policyService.decide(policyInputForTool({ session, tool, parameters }), { admittedInvocationId: invocation.id });
         if (!current.allowed && current.decision !== "require_approval") throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
       }
       const outcome = await runTestToolInvocation({
@@ -8232,6 +8232,7 @@ export function createToolGatewayService(
           tool,
           parameters: signedPayload.arguments,
         }),
+        { admittedInvocationId: invocation.id },
       );
       if (
         !currentAccess.allowed &&
@@ -10131,6 +10132,11 @@ export function createToolGatewayService(
           token: "",
           companyId: input.companyId,
           agentId: invocation.agentId,
+          actorType: "agent",
+          actorId: invocation.actorId,
+          gatewayId: invocation.gatewayId,
+          gatewayPublicId: invocation.gatewayPublicId,
+          gatewayTokenId: invocation.gatewayTokenId,
           runId: invocation.runId,
           issueId: issue.id,
           projectId: issue.projectId,
@@ -10160,6 +10166,7 @@ export function createToolGatewayService(
             tool,
             parameters: signedPayload.arguments,
           }),
+          { admittedInvocationId: invocation.id },
         );
         if (!access.allowed && access.decision !== "require_approval")
           throw new ToolGatewayHttpError(

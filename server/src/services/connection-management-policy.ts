@@ -32,6 +32,7 @@ export interface ConnectionManagementResource {
   targetAgentId?: string | null;
   projectId?: string | null;
   issueId?: string | null;
+  routineId?: string | null;
   /** Personal self-service/creator authority, only for operations that permit it. */
   selfServiceUserId?: string | null;
   /** Resolved installation diff changes only agent targets, preserving company sharing. */

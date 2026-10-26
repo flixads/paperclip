@@ -34,7 +34,7 @@ export function requiredConnectionUserAction(
 function assertBoundedManagementSelectors(body: Record<string, unknown>) {
   if (!body || typeof body !== "object" || Array.isArray(body)) throw badRequest("Resource selectors must be objects");
   const arrays = ["policyIds", "credentialRefs", "credentialSecretRefs", "installs", "bindings", "entries", "agentIds"];
-  const identifiers = ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "agentId", "targetAgentId", "subjectAgentId", "assignedAgentId", "secretId", "targetId"];
+  const identifiers = ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "routineId", "agentId", "targetAgentId", "subjectAgentId", "assignedAgentId", "secretId", "targetId"];
   const pending: Record<string, unknown>[] = [body];
   const unique = new Set<string>();
   let references = 0;
@@ -99,6 +99,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
           if (body[key] != null && body[key] !== userId) throw forbidden("Personal credentials must belong to the responsible user");
         }
       }
+      let applicationProvider: string | null = null;
       let companyId = typeof req.params.companyId === "string" ? req.params.companyId : null;
       const earlyCompanyId = companyId ?? req.actor.companyId;
       if (earlyCompanyId) {
@@ -116,8 +117,9 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
         readOnly: req.method === "GET" && action !== "connections:gateway" && (action !== "connections:audit" || purpose === "chat") };
       const targets = new Set<string>();
       const extraResources: ConnectionManagementResource[] = [];
+      const bindingTargets: { targetType: string; targetId: string }[] = [];
       const selectors: Record<string, unknown>[] = [];
-      const selectorKeys = ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "agentId", "targetAgentId", "targetType", "targetId", "agentIds", "connectionIds", "profileIds", "gatewayIds", "applicationIds", "catalogEntryIds", "projectIds", "issueIds"];
+      const selectorKeys = ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "routineId", "agentId", "targetAgentId", "targetType", "targetId", "agentIds", "connectionIds", "profileIds", "gatewayIds", "applicationIds", "catalogEntryIds", "projectIds", "issueIds", "routineId", "routineIds"];
       const seenSelectors = new Set<string>();
       const addSelector = (selected: Record<string, unknown>) => {
         assertBoundedManagementSelectors(selected);
@@ -222,7 +224,8 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       if (req.params.applicationId || body.applicationId) {
         const [application] = await db.select().from(toolApplications).where(eq(toolApplications.id, uuid(req.params.applicationId ?? body.applicationId)));
         bindCompany(application);
-        resource.provider ??= text(application.metadata.sourceTemplateKey);
+        applicationProvider = text(application.metadata.sourceTemplateKey);
+        resource.provider ??= applicationProvider;
         if (req.method !== "GET") {
           if (application.ownerAgentId) targets.add(application.ownerAgentId);
           const connections = await db.select({ id: toolConnections.id }).from(toolConnections).where(eq(toolConnections.applicationId, application.id)).limit(1025);
@@ -281,8 +284,10 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       if (!companyId) throw forbidden("A company is required for connection management");
       assertCompanyAccess(req, companyId);
       resource.companyId = companyId;
-      if (operation === "POST /companies/:companyId/tools/connections") resource.provider = null;
+      if (operation === "POST /companies/:companyId/tools/connections" || operation === "POST /companies/:companyId/tools/applications") resource.provider = null;
+      else if (operation.includes("/tool-applications/:applicationId")) resource.provider = applicationProvider;
       else resource.provider ??= text(body.provider) ?? text(body.galleryKey) ?? text(req.params.galleryKey);
+      if (operation === "PATCH /tool-applications/:applicationId" && Object.hasOwn(body, "metadata")) resource.requestedProvider = text(body.metadata?.sourceTemplateKey);
       if (operation === "PATCH /tool-connections/:connectionId" && (body.config || body.transportConfig)) {
         const proposed = body.config ?? body.transportConfig;
         resource.requestedProvider = text(proposed.sourceTemplateKey) ?? text(proposed.provider) ?? text(proposed.ai?.provider);
@@ -312,7 +317,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
         const selected = selectors[index];
         // Expand each advertised plural selector. A permission over one member
         // cannot authorize a policy that also changes another member's access.
-        for (const key of ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId"] as const) {
+        for (const key of ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "routineId"] as const) {
           for (const id of Array.isArray(selected[`${key}s`]) ? selected[`${key}s`] as unknown[] : []) addSelector({ [key]: uuid(id) });
         }
         if (selected.applicationId) {
@@ -348,6 +353,8 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
             selfServiceUserId: connection.createdByUserId,
           });
         }
+        if (["issue", "routine", "gateway"].includes(String(selected.targetType)) && text(selected.targetId)) bindingTargets.push({ targetType: String(selected.targetType), targetId: uuid(selected.targetId) });
+        if (text(selected.routineId)) extraResources.push({ ...resource, routineId: uuid(selected.routineId) });
         if (selected.targetType === "project" && text(selected.targetId)) extraResources.push({ ...resource, projectId: String(selected.targetId) });
         if (text(selected.projectId)) extraResources.push({ ...resource, projectId: String(selected.projectId) });
       }
@@ -369,7 +376,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
         operation.includes("ai-connection-pools"));
       if (changesAudience) await authorize(req.actor, "connections:profiles", resource, { targetAgentIds: [...targets] });
       const uniqueResources = new Map(extraResources.map(referenced => [JSON.stringify([
-        referenced.connectionId, referenced.profileId, referenced.gatewayId, referenced.projectId, referenced.issueId, referenced.provider, referenced.purpose,
+        referenced.connectionId, referenced.profileId, referenced.gatewayId, referenced.projectId, referenced.issueId, referenced.routineId, referenced.provider, referenced.purpose,
       ]), referenced]));
       if (uniqueResources.size > 1024) throw badRequest("Connection management request spans too many resources");
       const authorizeReferenced = async (afterHumanAction?: boolean) => {
@@ -383,6 +390,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
           }
         }
       };
+      for (const binding of bindingTargets) await management.authorizeBindingTarget(req.actor, action, resource, binding, { targetAgentIds: [...targets], mutation: req.method !== "GET", afterHumanAction });
       await authorizeReferenced();
       context.reauthorize = async (continuation) => {
         const current = await authorizeRequest(continuation?.afterHumanAction);
@@ -433,7 +441,7 @@ export async function filterConnectionManagementPolicies<T extends { selectors: 
   for (const row of rows) {
     const resources: Partial<ConnectionManagementResource>[] = [{}];
     const ids = (key: string) => [row.selectors[key], ...(Array.isArray(row.selectors[`${key}s`]) ? row.selectors[`${key}s`] as unknown[] : [])].filter((id): id is string => typeof id === "string");
-    for (const key of ["connectionId", "profileId", "gatewayId", "projectId", "issueId"] as const) for (const id of ids(key)) resources.push({ [key]: id });
+    for (const key of ["connectionId", "profileId", "gatewayId", "projectId", "issueId", "routineId"] as const) for (const id of ids(key)) resources.push({ [key]: id });
     for (const id of ids("agentId")) resources.push({ targetAgentId: id });
     for (const applicationId of ids("applicationId")) {
       const connections = await db.select({ connectionId: toolConnections.id }).from(toolConnections).where(and(eq(toolConnections.applicationId, applicationId), eq(toolConnections.companyId, context.resource.companyId)));
