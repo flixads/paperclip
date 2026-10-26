@@ -2358,9 +2358,9 @@ function connectorEnrollmentPrincipal(req: Request): string {
     assertCompanyAccess(req, companyId);
     const effective = await svc.getEffectiveProfilesForAgent(companyId, req.params.agentId as string);
     const profiles = await filterConnectionManagementRows(db, req, "connections:profiles", effective.profiles, profile => ({ profileId: profile.id }));
-    const tools = await filterConnectionManagementRows(db, req, "connections:profiles", effective.allowedTools, tool => ({ connectionId: tool.connectionId }));
-    const installed = await filterConnectionManagementRows(db, req, "connections:profiles", effective.installedConnections, connection => ({ connectionId: connection.id }));
-    if (profiles.length !== effective.profiles.length || tools.length !== effective.allowedTools.length || installed.length !== effective.installedConnections.length) throw forbidden("Effective profile resources are unavailable to this delegated principal");
+    const connectionIds = [...new Set([...effective.allowedTools.map(tool => tool.connectionId), ...effective.installedConnections.map(connection => connection.id)])];
+    const connections = await filterConnectionManagementRows(db, req, "connections:profiles", connectionIds, connectionId => ({ connectionId }));
+    if (profiles.length !== effective.profiles.length || connections.length !== connectionIds.length) throw forbidden("Effective profile resources are unavailable to this delegated principal");
     res.json(effective);
   });
 
