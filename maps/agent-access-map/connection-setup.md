@@ -87,8 +87,8 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 ### `post-companies-tools-stdio-templates`
 
 API: `present` — `POST /api/companies/{companyId}/tools/stdio-templates`; JSON REST.
-Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
-Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Agent access: `operator-only` — a board user creates host command templates; agents select approved templates through the catalog.
+Policy: Board actor, company access, and `tools:admin`. Connection-management grants do not authorize host command template administration.
 Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
@@ -96,8 +96,8 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 ### `post-companies-tools-stdio-templates-disable`
 
 API: `present` — `POST /api/companies/{companyId}/tools/stdio-templates/{templateId}/disable`; JSON REST.
-Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
-Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Agent access: `operator-only` — a board user disables host command templates; agents select approved templates through the catalog.
+Policy: Board actor, company access, and `tools:admin`. Connection-management grants do not authorize host command template administration.
 Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
@@ -106,7 +106,7 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 API: `present` — `POST /api/companies/{companyId}/tools/mcp/import-json`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
-Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Policy: Board actor and company access. This operation previews parsed MCP configuration; it does not execute host commands or require the host-template `tools:admin` grant.
 Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
