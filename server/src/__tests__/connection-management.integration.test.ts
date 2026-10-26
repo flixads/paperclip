@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { activityLog, agentApiKeys, companies, companySecrets, chatConversations, chatDeliveries, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolCallEvents, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
+import { activityLog, agentApiKeys, companies, companySecrets, companySecretVersions, chatConversations, chatDeliveries, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolCallEvents, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
@@ -19,6 +19,7 @@ import { configureAgentLifecycle } from "../services/agent-lifecycle.js";
 import { agentService } from "../services/agents.js";
 import { accessService } from "../services/access.js";
 import { secretService } from "../services/secrets.js";
+import { localEncryptedProvider } from "../secrets/local-encrypted-provider.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { PaperclipRunnerToolAuthority } from "../services/native-runtime/paperclip-runner-tool-authority.js";
 
@@ -709,7 +710,7 @@ describe("connection management with production default agents", () => {
       expect(await findSatisfiedToolConnection(server.db, task, credentialIntent)).toBeNull();
       const humanReconnect = async (signingSecret: string) => {
         const response = await fetch(server.apiUrl + "/api" + setupPath, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "reconnect", credentials: { signingSecret } }) });
+          body: JSON.stringify({ action: "reconnect", credentials: { signingSecret, botToken: "xoxb-fixture-token" } }) });
         expect({ status: response.status, body: await response.json() }).toMatchObject({ status: 200 });
       };
       await humanReconnect("fixture-signing-secret");
@@ -732,6 +733,37 @@ describe("connection management with production default agents", () => {
       await accessService(server.db).ensureMembership(f.companyId, "user", f.userId, "operator", "active");
       await satisfiedConnectionIntentService(server.db).sweepPending();
       expect((await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, credentialIntentId!)))[0].status).toBe("expired");
+      // Replacing complete credentials repairs unavailable old vault material.
+      for (const state of ["disabled", "deleted", "unreadable"] as const) {
+        const [connection] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+        const signing = connection.credentialSecretRefs.find(ref => ref.configPath === "credentials.signingSecret")!;
+        if (state === "unreadable") {
+          await server.db.update(companySecrets).set({ status: "active" }).where(eq(companySecrets.id, signing.secretId));
+          await server.db.update(companySecretVersions).set({ material: {} }).where(eq(companySecretVersions.secretId, signing.secretId));
+        } else {
+          await server.db.update(companySecrets).set({ status: state }).where(eq(companySecrets.id, signing.secretId));
+        }
+        const response = await fetch(server.apiUrl + "/api" + setupPath, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reconnect", credentials: { signingSecret: `human-repair-${state}`, botToken: "xoxb-fixture-token" } }) });
+        expect.soft({ status: response.status, body: await response.json() }, `repair ${state} signing secret`).toMatchObject({ status: 200 });
+        if (response.status === 200) {
+          const [current] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+          const replacement = current.credentialSecretRefs.find(ref => ref.configPath === "credentials.signingSecret")!;
+          expect(replacement.secretId).not.toBe(signing.secretId);
+          expect(await secretService(server.db).resolveSecretValue(f.companyId, replacement.secretId, "latest", {
+            accessContext: { consumerType: "system", consumerId: "integration-fixture", actorType: "system" },
+          })).toBe(`human-repair-${state}`);
+        }
+      }
+      // Unexpected resolver failures must abort before writing new references.
+      const [beforeFault] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      const resolverFault = vi.spyOn(localEncryptedProvider, "resolveVersion").mockRejectedValue(new Error("Unexpected secret resolution failure"));
+      try {
+        const response = await fetch(server.apiUrl + "/api" + setupPath, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reconnect", credentials: { signingSecret: "human-repair-unexpected", botToken: "xoxb-fixture-token" } }) });
+        expect(response.status).toBe(500);
+        expect((await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId)))[0].credentialSecretRefs).toEqual(beforeFault.credentialSecretRefs);
+      } finally { resolverFault.mockRestore(); }
       // Identity is a provider fixture; production HTTP admission and policy remain real.
       const [principal] = await server.db.insert(chatExternalPrincipals).values({ companyId: f.companyId, provider: "slack", providerAccountId: "TFIXTURE", externalId: "UHUMAN", isBot: false }).returning();
       await server.db.insert(chatIdentityLinks).values({ companyId: f.companyId, endpointId: created.body.id, principalId: principal.id, paperclipUserId: f.userId, status: "linked", confirmedAt: new Date() });
@@ -791,6 +823,15 @@ describe("connection management with production default agents", () => {
       expect(await f.request("POST", `/chat-endpoints/${created.body.id}/github/app`, appCredentials)).toMatchObject({ status: 200, body: { status: "needs_user_action" } });
       const importHandoff = await f.request("POST", `/chat-endpoints/${created.body.id}/github/app`, {}, f.jwt);
       expect(importHandoff).toMatchObject({ status: 200, body: { requiredUserAction: { kind: "enter_credentials", userId: f.userId } } });
+      expect.soft(importHandoff.body.requiredUserAction.setupPath).toContain("stage=credentials");
+      expect.soft(importHandoff.body.requiredUserAction.setupPath).not.toContain("reconnect=1");
+      const privateKeyHandoff = await f.request("POST", `/chat-endpoints/${created.body.id}/setup`, { action: "configure", credentials: { privateKey } }, f.jwt);
+      expect.soft(privateKeyHandoff, JSON.stringify(privateKeyHandoff)).toMatchObject({ status: 200, body: { requiredUserAction: { kind: "enter_credentials" } } });
+      if (privateKeyHandoff.status === 200) {
+        expect(privateKeyHandoff.body.interactionId).not.toBe(importHandoff.body.interactionId);
+        const retry = await f.request("POST", `/chat-endpoints/${created.body.id}/setup`, { action: "configure", credentials: { privateKey } }, f.jwt);
+        expect(retry.body.interactionId).toBe(privateKeyHandoff.body.interactionId);
+      }
       expect((await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId)))[0].credentialSecretRefs).toEqual([]);
       const imported = await humanRequest(`/api/chat-endpoints/${created.body.id}/github/app`, "POST", appCredentials);
       expect(imported.status).toBe(200);
