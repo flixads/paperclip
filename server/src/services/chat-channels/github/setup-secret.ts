@@ -305,7 +305,7 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
               "GitHub setup secret rotated but completion audit failed",
             );
           });
-        return { webhookSecret };
+        return { webhookSecret, credentialRotationId: rotationId };
       },
       {
         beforeFinalOwnershipCheck: options.setupSecretFinalOwnershipBarrier,
