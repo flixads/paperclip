@@ -136,19 +136,19 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 API: `present` — `POST /api/companies/{companyId}/tools/profiles/{profileId}/bind`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `verified` — [route](../../server/src/routes/tool-access.ts); [authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) bind a saved profile to a company project before configuring its gateway.
-Verification: `passed` — local assembled server, production agent authentication and database persistence; the saved project binding participates in subsequent gateway authorization.
-Gaps: Provider fixtures do not qualify live provider setup or availability.
+Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user. Resolve issue/routine/gateway targets, private parent/project access, and affected agents. Existing bindings and saved gateway profile references retain the same checks.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts) with real database persistence and deterministic provider responses where required.
+Verification: `passed` — Actual authenticated requests bind/unbind an authorized task and reject issue/routine/gateway targets outside agent configuration scope. Existing bindings and gateway profile references are rechecked on profile edits.
+Gaps: Fixture evidence does not qualify live provider behavior or an empirical model success rate.
 
 ### `post-companies-tools-profiles-unbind`
 
 API: `present` — `POST /api/companies/{companyId}/tools/profiles/{profileId}/unbind`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user. Resolve issue/routine/gateway targets, private parent/project access, and affected agents. Existing bindings and saved gateway profile references retain the same checks.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts) with real database persistence and deterministic provider responses where required.
+Verification: `passed` — Actual authenticated requests bind/unbind an authorized task and reject issue/routine/gateway targets outside agent configuration scope. Existing bindings and gateway profile references are rechecked on profile edits.
+Gaps: Fixture evidence does not qualify live provider behavior or an empirical model success rate.
 ## `client-connect`
 
 Capability ID: `gateways-profiles/client-connect`.

@@ -492,19 +492,19 @@ Review: `operation-reviewed`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/github/reviews/{reviewId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user. Linked task and project visibility apply to every review row in addition to endpoint and credential visibility.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts) with real database persistence and deterministic provider responses where required.
+Verification: `passed` — Actual agent-key reads return the visible review and omit or return 404 for a review linked to an inaccessible private task. Real database persistence; no live GitHub call.
+Gaps: Fixture evidence does not qualify live provider behavior or an empirical model success rate.
 
 ### `get-chat-endpoints-github-reviews`
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/github/reviews`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user. Linked task and project visibility apply to every review row in addition to endpoint and credential visibility.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts) with real database persistence and deterministic provider responses where required.
+Verification: `passed` — Actual agent-key reads return the visible review and omit or return 404 for a review linked to an inaccessible private task. Real database persistence; no live GitHub call.
+Gaps: Fixture evidence does not qualify live provider behavior or an empirical model success rate.
 
 ### `get-chat-endpoints-conversations`
 
@@ -795,10 +795,10 @@ Review: `operation-reviewed`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/test-message`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
-Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
-Gaps: Provider fixtures do not qualify live provider setup or availability.
+Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user. Test messages and identity-link invitations consume normal action-policy rate limits once before dispatch; saved request receipts prevent duplicate sends.
+Evidence: `verified` — [production-authenticated integration fixture](../../server/src/__tests__/connection-management.integration.test.ts) with real database persistence and deterministic provider responses where required.
+Verification: `passed` — Actual agent-key requests honor Off/Allowed policy, consume the configured one-message quota, replay a saved request without another send, and deny distinct test/invitation requests after the quota. Provider responses are fixtures.
+Gaps: Fixture evidence does not qualify live provider behavior or an empirical model success rate.
 
 ### `post-chat-endpoints-slack-resume`
 
