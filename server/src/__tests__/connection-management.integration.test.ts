@@ -717,6 +717,10 @@ describe("connection management with production default agents", () => {
       expect(await humanRotation.json()).toEqual({ webhookSecret: expect.stringMatching(/^[a-f0-9]{64}$/) });
       const [humanRotated] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
       expect(humanRotated.credentialSecretRefs).not.toEqual(beforeRotation.credentialSecretRefs);
+      const rotationState = await f.request("GET", `/chat-endpoints/${endpoint.id}`);
+      expect(rotationState.body.setup).toMatchObject({ credentialRotationId: expect.any(String), webhookVerifiedAt: null });
+      const nextRotation = await f.request("POST", `/chat-endpoints/${endpoint.id}/setup-secret`, {});
+      expect(nextRotation.body.requiredUserAction.setupPath).toContain(`afterRotationId=${rotationState.body.setup.credentialRotationId}`);
       expect(await findSatisfiedToolConnection(server.db, task, rotationIntent)).toBeNull();
       // Provider-fixture states separate restored health from new webhook verification.
       const [rotatedEndpoint] = await server.db.select().from(chatEndpoints).where(eq(chatEndpoints.id, endpoint.id));
