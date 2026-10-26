@@ -188,3 +188,12 @@ The review of `70b7c973c8` correctly identified that requiring a caller profile 
 A further real-JWT regression found that the `authKind: none` shortcut could skip comparison of dedicated grant identities (`/tmp/parity-credential-kind-red.log`). Credential identity comparison now applies for every auth label. Both API-key and no-auth-labelled dedicated grants deny before provider invocation when their identities differ. The same responsible-user and target authority, approval, revocation, and rate checks remain in force.
 
 Implementation `52a87697f0` passed **81 API/OpenAPI tests** (54 assembled-server actual-auth scenarios plus 27 contracts) in fresh PostgreSQL `parity_review_33`, log `/tmp/parity-caller-grants-full-green.log`. The earlier profile-only version is superseded by this evidence; its failures and recovery remain above. Final server typecheck and build passed (`/tmp/parity-caller-grants-final-types.log`, `/tmp/parity-caller-grants-final-build.log`). The earlier 18-case focused run passed before adding the no-auth-label regression (`/tmp/parity-caller-grants-green.log`); the final full suite includes all 19 delegated-test cases. Google consent, GitHub UI, and Copilot code are unchanged by this correction.
+
+
+### 2026-10-26: bounded tool-connection activity authorization
+
+Security review found that tool-connection activity repeated a full run capture per returned event, unlike the already corrected chat activity path. The actual run-JWT regression over 100 persisted events (half linked to an inaccessible private task) measured **100 capability decisions and 102 run captures** before the fix and failed (`/tmp/parity-tool-activity-red.log`).
+
+Implementation `e5b8070d2f` creates one management evaluator, shares decisions by task within the bounded page, and passes the current request's read context into each probe. The passing regression proves two capability decisions and at most two run captures, the same 50 visible events, no private event content, and a fresh 403 after revoking audit permission (`/tmp/parity-tool-activity-green.log`). No authority is cached across requests.
+
+**82 API/OpenAPI tests passed** in fresh PostgreSQL `parity_review_35`: 55 assembled-server actual-auth scenarios and 27 contracts (`/tmp/parity-tool-activity-full-green.log`). Server typecheck/build passed (`/tmp/parity-tool-activity-types.log`, `/tmp/parity-tool-activity-build.log`). The earlier red result is retained as the baseline; no full local sweep, live provider verification, or empirical model success claim is added.
