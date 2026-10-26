@@ -98,7 +98,7 @@ describe("Workspace service consent", () => {
   it.each([true, false])("uses pending consent only when newer than the saved grant (newer: %s)", async newer => {
     listGrants.mockResolvedValue({ currentUserId: "me", grants: [{
       kind: "user", subjectUserId: "me", updatedAt: "2026-10-26T10:00:00Z",
-      providerTenant: { oauth: { requestedScopes: googleWorkspaceSelectedScopes({ drive: "write" }) } },
+      providerTenant: { oauth: { requestedScopes: googleWorkspaceSelectedScopes({ drive: "write" }), consentedAt: "2026-10-26T10:00:00Z" } },
     }] });
     await render({ ...existing, config: { oauth: { pendingWorkspaceServiceRequests: {
       me: { requestedScopes: ["https://www.googleapis.com/auth/gmail.readonly"], requestedAt: newer ? "2026-10-26T11:00:00Z" : "2026-10-26T09:00:00Z" },
@@ -106,4 +106,17 @@ describe("Workspace service consent", () => {
     await click("Continue");
     expect(onContinue).toHaveBeenCalledWith(newer ? { gmail: "read" } : { drive: "write" });
   });
+  it.each([false, true])("preserves pending service choices through token refresh (legacy grant: %s)", async legacy => {
+    listGrants.mockResolvedValue({ currentUserId: "me", grants: [{
+      kind: "user", subjectUserId: "me", createdAt: "2026-10-26T10:00:00Z", updatedAt: "2026-10-26T12:00:00Z",
+      providerTenant: { oauth: { requestedScopes: googleWorkspaceSelectedScopes({ drive: "write" }),
+        ...(legacy ? {} : { consentedAt: "2026-10-26T10:00:00Z" }), refreshedAt: "2026-10-26T12:00:00Z" } },
+    }] });
+    await render({ ...existing, config: { oauth: { pendingWorkspaceServiceRequests: {
+      me: { requestedScopes: ["https://www.googleapis.com/auth/gmail.readonly"], requestedAt: "2026-10-26T11:00:00Z" },
+    } } } });
+    await click("Continue");
+    expect(onContinue).toHaveBeenCalledWith({ gmail: "read" });
+  });
+
 });

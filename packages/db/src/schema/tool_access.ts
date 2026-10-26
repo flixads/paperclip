@@ -204,6 +204,8 @@ export const connectionGrants = pgTable(
          * per-grant because two users can authorize the same connection with different scopes.
          */
         requestedScopes?: string[];
+        /** Last successful consent; ordinary token refresh preserves this. */
+        consentedAt?: string;
         tokenType?: string;
         refreshedAt?: string;
         refreshTokenExpiresAt?: string;

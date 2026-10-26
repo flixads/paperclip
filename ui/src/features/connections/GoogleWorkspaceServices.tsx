@@ -60,7 +60,9 @@ export function GoogleWorkspaceServicesDialog(props: DialogProps) {
   const savedScopes = grant?.providerTenant?.oauth?.requestedScopes ?? grant?.providerTenant?.oauth?.scopes ?? [];
   const pending = grants.data?.currentUserId ? pendingRequests?.[grants.data.currentUserId] : undefined;
   const pendingTime = Date.parse(pending?.requestedAt ?? "");
-  const grantTime = grant ? new Date(grant.updatedAt).getTime() : -Infinity;
+  // Refresh and lease writes update the grant row without changing consent.
+  const consentTime = grant ? Date.parse(grant.providerTenant?.oauth?.consentedAt ?? String(grant.createdAt)) : NaN;
+  const grantTime = Number.isFinite(consentTime) ? consentTime : -Infinity;
   const pendingScopes = Number.isFinite(pendingTime) && pendingTime > grantTime && Array.isArray(pending?.requestedScopes) && pending.requestedScopes.every(scope => typeof scope === "string")
     ? pending.requestedScopes as string[] : undefined;
   return <ServicePicker {...props} initial={props.initial ?? (pendingScopes ? googleWorkspaceSelectionForScopes(pendingScopes) : existing ? googleWorkspaceSelectionForScopes(savedScopes) : undefined)} />;

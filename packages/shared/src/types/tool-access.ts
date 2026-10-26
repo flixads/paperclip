@@ -233,6 +233,8 @@ export interface ConnectionGrant {
        * request, so this is the baseline its response is judged against.
        */
       requestedScopes?: string[];
+      /** Last successful consent; ordinary token refresh preserves this. */
+      consentedAt?: string;
       tokenType?: string;
       refreshTokenExpiresAt?: string;
       refreshedAt?: string;
