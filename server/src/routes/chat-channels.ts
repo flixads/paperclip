@@ -429,6 +429,10 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
   router.post("/chat-endpoints/:endpointId/setup-secret", managementGuard("connections:configure", "POST /chat-endpoints/:endpointId/setup-secret"), async (req, res) => {
     if (!(await assertEndpointManagementAccess(req, res))) return;
     res.set("Cache-Control", "no-store");
+    if (req.actor.type === "agent") {
+      res.json(await setupHandoff(req, "The responsible user must rotate and enter the webhook signing secret in GitHub."));
+      return;
+    }
     res
       .status(201)
       .json(

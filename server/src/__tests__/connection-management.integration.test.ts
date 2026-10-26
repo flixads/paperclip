@@ -647,6 +647,14 @@ describe("connection management with production default agents", () => {
       const imported = await f.request("POST", `/chat-endpoints/${created.body.id}/github/app`, { appId: String(appId), privateKey, webhookSecret: "fixture-webhook-secret", clientId: "fixture-client", clientSecret: "fixture-secret" });
       expect(imported, JSON.stringify(imported)).toMatchObject({ status: 200 });
       expect(JSON.stringify(imported.body)).not.toContain("PRIVATE KEY");
+      const [beforeRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      for (const token of [f.key.token, f.jwt]) {
+        const rotation = await f.request("POST", `/chat-endpoints/${created.body.id}/setup-secret`, {}, token);
+        expect(rotation, JSON.stringify(rotation)).toMatchObject({ status: 200, body: { status: "needs_user_action", endpointId: created.body.id } });
+        expect(rotation.body).not.toHaveProperty("webhookSecret");
+      }
+      const [afterRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      expect(afterRotation.credentialSecretRefs).toEqual(beforeRotation.credentialSecretRefs);
       const refreshed = await f.request("POST", `/chat-endpoints/${created.body.id}/github/repositories/refresh`, {});
       expect(refreshed, JSON.stringify(refreshed)).toMatchObject({ status: 200 });
       expect(JSON.stringify(refreshed.body)).toContain("fixture/repo");
@@ -668,6 +676,11 @@ describe("connection management with production default agents", () => {
       expect((await humanRequest(callback)).status).toBe(403);
       const confirmed = await humanRequest(`/api/chat-endpoints/${created.body.id}/github/identity/confirm`, "POST", { githubUserId: "1357" });
       expect(confirmed.status, JSON.stringify(await confirmed.json())).toBe(200);
+      const humanRotation = await humanRequest(`/api/chat-endpoints/${created.body.id}/setup-secret`, "POST", {});
+      expect(humanRotation.status).toBe(201);
+      expect(await humanRotation.json()).toEqual({ webhookSecret: expect.stringMatching(/^[a-f0-9]{64}$/) });
+      const [humanRotated] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      expect(humanRotated.credentialSecretRefs).not.toEqual(beforeRotation.credentialSecretRefs);
     } finally { provider = null; }
   });
 
