@@ -15,6 +15,10 @@ import { accessService } from "../services/access.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { PaperclipRunnerToolAuthority } from "../services/native-runtime/paperclip-runner-tool-authority.js";
 
+vi.mock("../services/agent-lifecycle-driver.js", () => ({
+  createLifecycleDriver: () => ({ requiredPluginIds: async () => [], runPlugin: async () => "complete", runHost: async () => "complete" }),
+}));
+
 // All requests traverse the assembled server and production bearer middleware.
 // No req.actor injection or special permission grants establish access.
 describe("connection management with production default agents", () => {
@@ -74,6 +78,7 @@ describe("connection management with production default agents", () => {
     const f = await fixture();
     const grants = await server.db.select().from(principalPermissionGrants).where(eq(principalPermissionGrants.principalId, f.agentId));
     expect(grants.some(g => g.permissionKey === "tools:admin")).toBe(false);
+    expect(await f.request("GET", `/companies/${f.companyId}/tools/stdio-templates`)).toMatchObject({ status: 403 });
     const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Fixture tool", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
     expect(created, JSON.stringify(created)).toMatchObject({ status: 201 });
     expect(await f.request("PATCH", `/tool-connections/${created.body.id}`, { name: "Updated tool" }, f.jwt)).toMatchObject({ status: 200, body: { name: "Updated tool" } });

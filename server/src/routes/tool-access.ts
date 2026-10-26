@@ -779,6 +779,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
   }
 
   async function assertToolsAdmin(req: Request, companyId: string) {
+    assertBoard(req);
     await assertBoardToolPermission(req, companyId, "tools:admin");
   }
 

@@ -62,7 +62,6 @@ async function fixture(provider: "anthropic" | "openai", method: "api_key" | "su
   const companyId = randomUUID();
   const agentId = randomUUID();
   const userId = `owner-${companyId}`;
-  await db.insert(authUsers).values({ id: userId, name: "Manager owner", email: `${userId}@fixture.invalid`, emailVerified: true, createdAt: new Date(), updatedAt: new Date() });
   const binding = { provider, method, mode: "responsible_user" } as const;
   const adapterType = provider === "anthropic" ? "claude_local" : "codex_local";
   await db.insert(authUsers).values({ id: userId, name: "Connection owner", email: `${userId}@example.test`,

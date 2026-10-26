@@ -46,6 +46,8 @@ export function responsibleUserForAiRequest(req: Request): string | null {
 }
 
 export async function canManageAiConnections(db: Db, req: Request, companyId: string): Promise<boolean> {
+  const memberships = req.actor.type === "agent" ? req.actor.onBehalfOfMemberships : req.actor.memberships;
+  if (memberships?.some(m => m.companyId === companyId && m.status === "active" && m.membershipRole === "viewer")) return false;
   return (await connectionManagementService(db).capability(req.actor, "connections:configure", {
     type: "connection_management", companyId, purpose: "ai", operation: "manage",
   }, { mutation: false })).allowed;

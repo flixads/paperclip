@@ -1505,6 +1505,7 @@ const BOARD_ONLY_OPERATIONS = new Set([
   "POST /api/agents/{id}/connection-intents/{interactionId}/adopt",
   "POST /api/connection-intents/{interactionId}/decline",
   "POST /api/companies/{companyId}/tools/action-requests/{actionRequestId}/trust-rule",
+  "GET /api/companies/{companyId}/tools/stdio-templates",
   "POST /api/companies/{companyId}/tools/stdio-templates",
   "POST /api/companies/{companyId}/tools/stdio-templates/{templateId}/disable",
   "POST /api/companies/{companyId}/tools/mcp/import-json",
