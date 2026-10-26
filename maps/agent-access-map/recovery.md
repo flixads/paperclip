@@ -465,6 +465,11 @@ Agent access: `partial` — eligible admitted agent/native bound wake receives s
 
 Policy: Exact prior run/lease/workspace stop proof, no competing execution, current owner/responsible user, normal subtree/project pause/budget/review gates. Durable ordered message/wake receipts avoid duplicates; never borrow authority from stale callback/other routine. Unused hold-denied admission needs no-execution/dispatch evidence before automatic reconsideration.
 
+A human-authored comment attached to an assignment wake can authorize the same
+fresh continuation as an ordinary comment. The server validates the persisted
+comment and its task/author/timing; the assignment label alone grants no
+authority. Agents and system wakes cannot inherit this human-input path.
+
 Evidence: `source-only` — [legacy gates](../../server/src/services/recovery/legacy-continuation.ts), [native ownership](../../server/src/services/native-runtime/native-restart-recovery.ts), [queued Stop](../../server/src/modules/wake-queue/adapters/postgres.ts); reviewed at `3bbc2104b65caf9f7763938a01260a5673e12f7a`. No live provider proof.
 
 Verification: `not-run` — After confirmed cleanup one useful continuation consumes saved order; repeat sweep/reload no duplicate. Pause/budget/approval/unknown external outcome and reassignment prevent stale admission. Queued Stop leaves another routine cycle intact.

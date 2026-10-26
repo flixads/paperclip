@@ -1480,6 +1480,13 @@ delta when attaching a new run. Other stale-event and authority checks remain.
 
 ### Explicit user continuation after execution failure
 
+When a user's comment also assigns the task back to its agent, the assignment
+wake retains that comment's continuation intent. Admission validates the saved
+comment, its author, task, timing and delivery receipt through the same checks as
+an ordinary comment wake. A bare assignment, agent/system input or mention wake
+does not authorize continuation. Already deferred assignment-with-comment
+receipts use this same path after recovery; they do not require another comment.
+
 An execution recovery hold blocks automatic replay. A new authenticated user
 comment or exact failed-run Retry can authorize a fresh native or legacy
 conversation turn after the predecessor's

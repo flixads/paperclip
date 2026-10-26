@@ -41,6 +41,9 @@ Agent access: [companion](../agent-access-map/recovery.md).
   an explicit decision, not automatic replay.
 - `user-continuation`: `recovery/user-continuation` — saved user messages after a stop are reconsidered once
   cleanup proves the old execution is stopped; duplicate wakes are avoided.
+  A user comment that also reassigns the task retains this intent, including
+  existing deferred assignment receipts. The comment's identity and author,
+  current assignment, stop proof and normal execution gates remain required.
 - `reconnect`: `recovery/reconnect` — browser stream recovery refreshes persisted state without claiming
   the agent itself restarted or that a failed run succeeded.
 

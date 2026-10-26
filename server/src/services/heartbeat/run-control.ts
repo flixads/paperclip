@@ -40,6 +40,7 @@ import {
 } from "../remote-execution-termination.js";
 import {
   admitExplicitNativeContinuation,
+  isUserCommentContinuationReason,
   undeliveredLegacyUserCommentIds,
 } from "../explicit-native-continuation.js";
 import { isCancelledNativeStartup } from "../cancelled-native-startup.js";
@@ -575,7 +576,7 @@ export function createHeartbeatRunControl(db: Db, dependencies: HeartbeatRunCont
       }
       if (legacyContinuation || stoppedNativeContinuation) {
         if (!commentId || !run.finishedAt || !requestedByActorId ||
-            !["issue_commented", "issue_reopened_via_comment"].includes(reason ?? "")) continue;
+            !isUserCommentContinuationReason(reason)) continue;
         const [comment] = await db.select().from(issueComments).where(and(
           eq(issueComments.companyId, run.companyId), eq(issueComments.issueId, issueId),
           sql`${issueComments.id}::text = ${commentId}`, eq(issueComments.authorType, "user"),
