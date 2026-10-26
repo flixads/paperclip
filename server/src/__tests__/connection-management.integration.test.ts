@@ -650,7 +650,8 @@ describe("connection management with production default agents", () => {
       const [beforeRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
       for (const token of [f.key.token, f.jwt]) {
         const rotation = await f.request("POST", `/chat-endpoints/${created.body.id}/setup-secret`, {}, token);
-        expect(rotation, JSON.stringify(rotation)).toMatchObject({ status: 200, body: { status: "needs_user_action", endpointId: created.body.id } });
+        expect(rotation, JSON.stringify(rotation)).toMatchObject({ status: 200, body: { status: "needs_user_action", endpointId: created.body.id,
+          requiredUserAction: { kind: "enter_credentials", userId: f.userId } } });
         expect(rotation.body).not.toHaveProperty("webhookSecret");
       }
       const [afterRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));

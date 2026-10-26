@@ -788,6 +788,10 @@ describe("openapi routes", () => {
 
     const setupSecret =
       spec.paths["/api/chat-endpoints/{endpointId}/setup-secret"].post;
+    const secretHandoff = setupSecret.responses["200"].content["application/json"].schema;
+    expect(secretHandoff.properties.requiredUserAction.properties.kind.enum).toEqual(["enter_credentials"]);
+    expect(secretHandoff.properties).not.toHaveProperty("webhookSecret");
+    expect(setupSecret.description).toContain("without rotating or reading");
     expect(
       setupSecret.responses["201"].content["application/json"].schema,
     ).toMatchObject({
