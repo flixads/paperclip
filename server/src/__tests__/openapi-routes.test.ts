@@ -1098,6 +1098,10 @@ describe("openapi routes", () => {
     expect(input.required).not.toContain("ownerType");
     const response = registration.responses["200"].content["application/json"].schema;
     expect(response.oneOf ?? response.anyOf).toHaveLength(2);
+    const appImport = spec.paths["/api/chat-endpoints/{endpointId}/github/app"].post;
+    expect(appImport.description).toContain("Only a human session");
+    const appImportResponse = appImport.responses["200"].content["application/json"].schema;
+    expect(appImportResponse.oneOf ?? appImportResponse.anyOf).toHaveLength(2);
   });
 
   it("documents GitHub recovery, draft receipts, paged repositories and old review lookups", () => {
@@ -1113,7 +1117,8 @@ describe("openapi routes", () => {
     const receipt = spec.paths[root + "draft"].put.responses["200"].content["application/json"].schema;
     expect(receipt.required).toEqual(["saved"]);
     expect(receipt.properties).not.toHaveProperty("state");
-    const app = spec.paths[root + "app"].post.requestBody.content["application/json"].schema;
+    const appInput = spec.paths[root + "app"].post.requestBody.content["application/json"].schema;
+    const app = (appInput.oneOf ?? appInput.anyOf).find((variant: { properties?: { appId?: unknown } }) => variant.properties?.appId);
     expect(app.properties.clientId).toBeDefined();
     expect(app.properties.clientSecret).toBeDefined();
     expect(app.required).not.toContain("clientId");

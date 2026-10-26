@@ -229,7 +229,7 @@ describe("connection management with production default agents", () => {
     expect(bindings.map(binding => binding.targetId)).toEqual([f.agentId]);
   });
 
-  it.each(["none", "other-agent", "agent", "user", "cancelled", "project-block", "rate-limit", "agent-rate-approval"] as const)("keeps delegated test policy and approval continuation bounded (%s)", async revocation => {
+  it.each(["none", "other-agent", "agent", "user", "cancelled", "project-block", "rate-limit", "agent-rate-approval", "authorized-policy-edit"] as const)("keeps delegated test policy and approval continuation bounded (%s)", async revocation => {
     const f = await fixture();
     let targetAgentId = f.agentId;
     if (revocation === "other-agent") {
@@ -317,6 +317,18 @@ describe("connection management with production default agents", () => {
       expect(calls).toBe(0);
       const approvalPath = `/tool-gateway/action-requests/${pending.body.actionRequestId}/approve`;
       expect(await f.request("POST", approvalPath, { companyId: f.companyId }, f.jwt)).toMatchObject({ status: 403 });
+      if (revocation === "authorized-policy-edit") {
+        const policiesPath = `/companies/${f.companyId}/tools/policies`;
+        const policy = await f.request("POST", policiesPath, { name: "Requested self-targeted access", policyType: "allow", priority: 0,
+          selectors: { agentId: f.agentId, connectionId: created.body.id } }, f.jwt);
+        expect(policy, JSON.stringify(policy)).toMatchObject({ status: 201 });
+        expect(await f.request("POST", path, body, f.jwt)).toMatchObject({ status: 200, body: { decision: "allowed" } });
+        expect(calls).toBe(1);
+        expect(await f.request("POST", approvalPath, { companyId: f.companyId }, f.jwt)).toMatchObject({ status: 403 });
+        await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_profiles")));
+        expect(await f.request("PATCH", `${policiesPath}/${policy.body.id}`, { enabled: false }, f.jwt)).toMatchObject({ status: 403 });
+        return;
+      }
       await server.db.update(heartbeatRuns).set({ status: "succeeded" }).where(eq(heartbeatRuns.id, f.runId));
       if (revocation === "agent") await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:use")));
       if (revocation === "user") for (const permission of ["tools:use", "tools:manage_connections"]) await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.companyId, f.companyId), eq(principalPermissionGrants.principalId, f.userId), eq(principalPermissionGrants.permissionKey, permission)));
@@ -644,27 +656,23 @@ describe("connection management with production default agents", () => {
     try {
       const created = await f.request("POST", `/companies/${f.companyId}/chat-endpoints`, { provider: "github", assignedAgentId: f.agentId });
       expect(await f.request("POST", `/chat-endpoints/${created.body.id}/github/registration`, { name: `fixture-${f.agentId.slice(0, 8)}` })).toMatchObject({ status: 200 });
-      const imported = await f.request("POST", `/chat-endpoints/${created.body.id}/github/app`, { appId: String(appId), privateKey, webhookSecret: "fixture-webhook-secret", clientId: "fixture-client", clientSecret: "fixture-secret" });
-      expect(imported, JSON.stringify(imported)).toMatchObject({ status: 200 });
-      expect(JSON.stringify(imported.body)).not.toContain("PRIVATE KEY");
-      const [beforeRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
-      for (const token of [f.key.token, f.jwt]) {
-        const rotation = await f.request("POST", `/chat-endpoints/${created.body.id}/setup-secret`, {}, token);
-        expect(rotation, JSON.stringify(rotation)).toMatchObject({ status: 200, body: { status: "needs_user_action", endpointId: created.body.id,
-          requiredUserAction: { kind: "enter_credentials", userId: f.userId } } });
-        expect(rotation.body).not.toHaveProperty("webhookSecret");
-      }
-      const [afterRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
-      expect(afterRotation.credentialSecretRefs).toEqual(beforeRotation.credentialSecretRefs);
-      const refreshed = await f.request("POST", `/chat-endpoints/${created.body.id}/github/repositories/refresh`, {});
-      expect(refreshed, JSON.stringify(refreshed)).toMatchObject({ status: 200 });
-      expect(JSON.stringify(refreshed.body)).toContain("fixture/repo");
-      expect(await f.request("POST", `/chat-endpoints/${created.body.id}/github/verify`, {})).toMatchObject({ status: 200 });
       const cookie = await server.humanSession(f.userId);
       const humanRequest = (path: string, method = "GET", body?: unknown, session = cookie) => fetch(server.apiUrl + path, {
         method, redirect: "manual", headers: { cookie: session, "Content-Type": "application/json", origin: server.apiUrl },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
+      const appCredentials = { appId: String(appId), privateKey, webhookSecret: "fixture-webhook-secret", clientId: "fixture-client", clientSecret: "fixture-secret" };
+      expect(await f.request("POST", `/chat-endpoints/${created.body.id}/github/app`, appCredentials)).toMatchObject({ status: 200, body: { status: "needs_user_action" } });
+      const importHandoff = await f.request("POST", `/chat-endpoints/${created.body.id}/github/app`, {}, f.jwt);
+      expect(importHandoff).toMatchObject({ status: 200, body: { requiredUserAction: { kind: "enter_credentials", userId: f.userId } } });
+      expect((await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId)))[0].credentialSecretRefs).toEqual([]);
+      const imported = await humanRequest(`/api/chat-endpoints/${created.body.id}/github/app`, "POST", appCredentials);
+      expect(imported.status).toBe(200);
+      expect(JSON.stringify(await imported.json())).not.toContain("PRIVATE KEY");
+      const refreshed = await f.request("POST", `/chat-endpoints/${created.body.id}/github/repositories/refresh`, {});
+      expect(refreshed, JSON.stringify(refreshed)).toMatchObject({ status: 200 });
+      expect(JSON.stringify(refreshed.body)).toContain("fixture/repo");
+      expect(await f.request("POST", `/chat-endpoints/${created.body.id}/github/verify`, {})).toMatchObject({ status: 200 });
       const start = await humanRequest(`/api/chat-endpoints/${created.body.id}/github/identity/start`, "POST", {});
       const started = await start.json();
       expect(started, JSON.stringify(started)).toHaveProperty("authorizationUrl");
@@ -677,11 +685,46 @@ describe("connection management with production default agents", () => {
       expect((await humanRequest(callback)).status).toBe(403);
       const confirmed = await humanRequest(`/api/chat-endpoints/${created.body.id}/github/identity/confirm`, "POST", { githubUserId: "1357" });
       expect(confirmed.status, JSON.stringify(await confirmed.json())).toBe(200);
+      const [endpoint] = await server.db.select().from(chatEndpoints).where(eq(chatEndpoints.id, created.body.id));
+      await server.db.update(chatEndpoints).set({ status: "active", setup: { ...endpoint.setup, webhookVerifiedAt: new Date().toISOString() } }).where(eq(chatEndpoints.id, endpoint.id));
+      await server.db.update(toolConnections).set({ status: "active", enabled: true, healthStatus: "healthy" }).where(eq(toolConnections.id, created.body.connectionId));
+      const [beforeRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      let rotationIntentId = "";
+      for (const token of [f.key.token, f.jwt, f.jwt]) {
+        const rotation = await f.request("POST", `/chat-endpoints/${created.body.id}/setup-secret`, {}, token);
+        expect(rotation, JSON.stringify(rotation)).toMatchObject({ status: 200, body: { status: "needs_user_action", endpointId: created.body.id,
+          requiredUserAction: { kind: "enter_credentials", userId: f.userId } } });
+        expect(rotation.body).not.toHaveProperty("webhookSecret");
+        expect(rotation.body.requiredUserAction.setupPath).toContain("stage=credentials&reconnect=1&rotateSecret=1");
+        if (token === f.jwt) {
+          if (rotationIntentId) expect(rotation.body.interactionId).toBe(rotationIntentId);
+          rotationIntentId = rotation.body.interactionId;
+        }
+      }
+      expect(rotationIntentId).not.toBe(importHandoff.body.interactionId);
+      const [afterRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      expect(afterRotation.credentialSecretRefs).toEqual(beforeRotation.credentialSecretRefs);
+      const [rotationIntent] = await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, rotationIntentId));
+      const [task] = await server.db.select().from(issues).where(eq(issues.id, f.issueId));
+      const setupOptions = await humanRequest(`/api/connection-intents/${rotationIntentId}/setup-options`);
+      expect(setupOptions.status).toBe(200);
+      expect((await setupOptions.json()).chatSetup.path).toContain("stage=credentials&reconnect=1&rotateSecret=1");
+      expect(await findSatisfiedToolConnection(server.db, task, rotationIntent)).toBeNull();
+      await satisfiedConnectionIntentService(server.db).sweepPending();
+      expect((await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, rotationIntentId)))[0].status).toBe("pending");
       const humanRotation = await humanRequest(`/api/chat-endpoints/${created.body.id}/setup-secret`, "POST", {});
       expect(humanRotation.status).toBe(201);
       expect(await humanRotation.json()).toEqual({ webhookSecret: expect.stringMatching(/^[a-f0-9]{64}$/) });
       const [humanRotated] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
       expect(humanRotated.credentialSecretRefs).not.toEqual(beforeRotation.credentialSecretRefs);
+      expect(await findSatisfiedToolConnection(server.db, task, rotationIntent)).toBeNull();
+      // Provider-fixture states separate restored health from new webhook verification.
+      const [rotatedEndpoint] = await server.db.select().from(chatEndpoints).where(eq(chatEndpoints.id, endpoint.id));
+      await server.db.update(chatEndpoints).set({ status: "active" }).where(eq(chatEndpoints.id, endpoint.id));
+      await server.db.update(toolConnections).set({ status: "active", enabled: true, healthStatus: "healthy" }).where(eq(toolConnections.id, created.body.connectionId));
+      expect(await findSatisfiedToolConnection(server.db, task, rotationIntent)).toBeNull();
+      await server.db.update(chatEndpoints).set({ setup: { ...rotatedEndpoint.setup, webhookVerifiedAt: new Date().toISOString() } }).where(eq(chatEndpoints.id, endpoint.id));
+      expect((await findSatisfiedToolConnection(server.db, task, rotationIntent))?.id).toBe(created.body.connectionId);
     } finally { provider = null; }
   });
 

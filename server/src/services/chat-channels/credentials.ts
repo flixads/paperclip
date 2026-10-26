@@ -253,6 +253,7 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
     credentials: Record<string, string>,
     credentialLease: CredentialMutationLeaseGuard,
     actorUserId?: string | null,
+    onCommitted?: (tx: Db) => Promise<void>,
   ) {
     await credentialLease.assertOwned();
     const previousRefs = await db
@@ -344,6 +345,7 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
           .update(toolConnections)
           .set({ credentialSecretRefs: refs, updatedAt: new Date() })
           .where(eq(toolConnections.id, endpoint.connectionId));
+        await onCommitted?.(tx as unknown as Db);
         await credentialLease.assertOwned(tx);
       });
     } catch (error) {

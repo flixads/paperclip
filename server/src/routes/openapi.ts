@@ -861,6 +861,21 @@ const chatEndpointSetupSecretResponseSchema = z
   .object({ webhookSecret: z.string().length(64) })
   .strict();
 
+const chatEndpointCredentialHandoffSchema = z.object({
+  status: z.literal("needs_user_action"),
+  interactionId: z.string().uuid().nullable(),
+  endpointId: z.string().uuid(),
+  connectionId: z.string().uuid(),
+  requiredUserAction: z.object({
+    kind: z.literal("enter_credentials"),
+    userId: z.string(),
+    resource: z.object({ type: z.literal("chat_endpoint"), id: z.string().uuid(), companyId: z.string().uuid() }),
+    setupPath: z.string(),
+    reason: z.string(),
+    continuation: z.string(),
+  }),
+});
+
 const chatEndpointResponseSchema = z
   .object({
     id: z.string().uuid(),
@@ -2405,9 +2420,9 @@ const githubBotOperations: Array<{
   { method: "post", suffix: "identity/confirm", summary: "Confirm the observed GitHub identity", description: "Confirms only the signed-in configuring member's expiring observed identity and resumes the same setup draft.", body: z.object({ githubUserId: z.string().regex(/^[1-9][0-9]*$/) }).strict(), response: githubWizardResponseSchema },
   {
     method: "post", suffix: "app", summary: "Connect an existing GitHub App",
-    description: "Validates App identity with GitHub and vaults write-only credentials server-side. Installation and signed webhook delivery must still be verified.",
-    body: z.object({ appId: z.string().regex(/^[1-9][0-9]*$/), privateKey: z.string().min(1).max(32000), webhookSecret: z.string().min(16).max(1024), clientId: z.string().min(1).max(128).optional(), clientSecret: z.string().min(1).max(1024).optional() }).strict().refine(value => !!value.clientId === !!value.clientSecret, "Supply both OAuth client credentials"),
-    response: chatEndpointResponseSchema,
+    description: "Agents send an empty body to receive a saved credential-entry handoff. Only a human session may import App credentials and its webhook signing key. Human import validates App identity with GitHub and vaults credentials; installation and signed webhook delivery must still be verified.",
+    body: z.union([z.object({ appId: z.string().regex(/^[1-9][0-9]*$/), privateKey: z.string().min(1).max(32000), webhookSecret: z.string().min(16).max(1024), clientId: z.string().min(1).max(128).optional(), clientSecret: z.string().min(1).max(1024).optional() }).strict().refine(value => !!value.clientId === !!value.clientSecret, "Supply both OAuth client credentials"), z.object({}).strict()]),
+    response: z.union([chatEndpointResponseSchema, chatEndpointCredentialHandoffSchema]),
   },
   {
     method: "post", suffix: "repositories/refresh", summary: "Refresh repositories available to the bot installation",
@@ -2569,20 +2584,7 @@ registry.registerPath({
     "Authorized agents receive a saved human setup handoff without rotating or reading the signing secret. A human session generates and vaults a new secret, returned exactly once for entry in GitHub. Normal endpoint reads expose only whether one is configured. Human regeneration immediately rotates the server-side value.",
   request: { params: z.object({ endpointId: z.string().uuid() }) },
   responses: {
-    200: r.ok(z.object({
-      status: z.literal("needs_user_action"),
-      interactionId: z.string().uuid().nullable(),
-      endpointId: z.string().uuid(),
-      connectionId: z.string().uuid(),
-      requiredUserAction: z.object({
-        kind: z.literal("enter_credentials"),
-        userId: z.string(),
-        resource: z.object({ type: z.literal("chat_endpoint"), id: z.string().uuid(), companyId: z.string().uuid() }),
-        setupPath: z.string(),
-        reason: z.string(),
-        continuation: z.string(),
-      }),
-    })),
+    200: r.ok(chatEndpointCredentialHandoffSchema),
     201: r.ok(chatEndpointSetupSecretResponseSchema),
     401: r.unauthorized,
     403: r.forbidden,

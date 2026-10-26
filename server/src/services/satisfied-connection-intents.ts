@@ -4,7 +4,7 @@ import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { approvals, chatEndpoints, toolConnections, companyMemberships, connectionIntentDeliveries, issueApprovals, issueThreadInteractions, issues, type Db } from "@paperclipai/db";
 import { connectionIntentPayloadSchema } from "@paperclipai/shared";
 import { logActivity, publishActivity, type ActivityPublication } from "./activity-log.js";
-import { connectionIntentService } from "./connection-intents.js";
+import { chatCredentialRotationId, connectionIntentService } from "./connection-intents.js";
 import { DELIVERY_QUEUES, notifyDeliveryWork } from "./delivery-work-notifications.js";
 import { logger } from "../middleware/logger.js";
 import { createToolGatewayService } from "./tool-gateway.js";
@@ -29,6 +29,12 @@ async function findAvailableToolConnection(db: Db, task: Task, intent: Intent, p
     const [connection] = await db.select().from(toolConnections).where(and(eq(toolConnections.id, endpoint.connectionId),
       eq(toolConnections.companyId, task.companyId), eq(toolConnections.status, "active"), eq(toolConnections.enabled, true)));
     if (!connection || !["ok", "healthy"].includes(connection.healthStatus)) return null;
+    if (payload.savedSetup.credentialRotation) {
+      // Rotation commits its generation and clears webhook verification in the
+      // same transaction as vault refs. Old health cannot satisfy this request.
+      const generation = chatCredentialRotationId(endpoint.setup);
+      if (!generation || generation === payload.savedSetup.credentialRotation.previousId || !endpoint.setup.webhookVerifiedAt) return null;
+    }
     const capability = await connectionManagementService(db).capability({ type: "agent", agentId: payload.requestingAgentId,
       companyId: task.companyId, onBehalfOfUserId: intent.addresseeUserId }, "connections:configure", {
       type: "connection_management", companyId: task.companyId, connectionId: connection.id, projectId: task.projectId,

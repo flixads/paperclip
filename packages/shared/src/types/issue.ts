@@ -1449,7 +1449,7 @@ export type ConnectionIntentPhase = "requested" | "authorizing" | "needs_retry";
  */
 export interface ConnectionIntentPayload {
   /** Existing chat setup; the server derives the destination from these IDs. */
-  savedSetup?: { endpointId: string; connectionId: string };
+  savedSetup?: { endpointId: string; connectionId: string; action?: "enter_credentials" | "rotate_credentials" | "confirm_identity"; credentialRotation?: { previousId: string | null } };
   version: 1;
   /** Server-authored consent to a fixed set of tools on an existing connection. */
   accessRequest?: {

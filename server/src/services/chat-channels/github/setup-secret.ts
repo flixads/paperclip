@@ -10,6 +10,7 @@ import {
 import {
   and,
   eq,
+  sql,
 } from "drizzle-orm";
 
 import type { Db } from "@paperclipai/db";
@@ -42,7 +43,7 @@ type GitHubSetupSecretOptions = {
   endpointRecord: (endpointId: string) => Promise<EndpointRecord | null>;
   withCredentialMutationLease: ReturnType<typeof chatCredentialMutationLease>;
   resolveCredentials: (endpoint: EndpointRow) => Promise<Record<string, string>>;
-  persistCredentials: (endpoint: EndpointRow, credentials: Record<string, string>, lease: CredentialMutationLeaseGuard, actorUserId?: string | null) => Promise<ToolCredentialSecretRef[]>;
+  persistCredentials: (endpoint: EndpointRow, credentials: Record<string, string>, lease: CredentialMutationLeaseGuard, actorUserId?: string | null, onCommitted?: (tx: Db) => Promise<void>) => Promise<ToolCredentialSecretRef[]>;
   runtimeGeneration: (setup: ChatEndpointSetupState) => number;
   credentialFingerprint: (refs: ToolCredentialSecretRef[]) => string;
   invalidateRuntime: (endpointId: string) => Promise<boolean>;
@@ -244,6 +245,11 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
             { ...existing, webhookSecret },
             credentialLease,
             actorUserId,
+            async (tx) => {
+              await tx.update(chatEndpoints).set({
+                setup: sql`${chatEndpoints.setup} || ${JSON.stringify({ credentialRotationId: rotationId, webhookVerifiedAt: null })}::jsonb`,
+              }).where(eq(chatEndpoints.id, endpoint.id));
+            },
           );
           committedWebhookSecretRef =
             persistedRefs.find(
