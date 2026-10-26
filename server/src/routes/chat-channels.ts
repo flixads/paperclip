@@ -30,6 +30,7 @@ import {
   resolveChatPublicationSchema,
   updateChatEndpointSchema,
   type ChatProvider,
+  type ConnectionRequiredUserAction,
 } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import {
@@ -103,7 +104,7 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
   const access = accessService(db);
   const github = githubChatManagementService(db, options.fetch);
 
-  async function setupHandoff(req: ExpressRequest, reason: string) {
+  async function setupHandoff(req: ExpressRequest, reason: string, kind: ConnectionRequiredUserAction["kind"] = "authenticate") {
     const endpoint = await service.get(endpointId(req));
     const [company] = await db.select({ prefix: companies.issuePrefix }).from(companies).where(eq(companies.id, endpoint.companyId));
     const interactionId = req.actor.type === "agent" && req.actor.runId && endpoint.assignedAgentId === req.actor.agentId
@@ -112,7 +113,7 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
       : null;
     return { status: "needs_user_action", interactionId, endpointId: endpoint.id, connectionId: endpoint.connectionId,
       ...requiredConnectionUserAction(req, { type: "chat_endpoint", id: endpoint.id, companyId: endpoint.companyId },
-        `/${encodeURIComponent(company!.prefix)}/apps/chat/connect?${new URLSearchParams({ provider: endpoint.provider, resume: endpoint.id })}`, reason),
+        `/${encodeURIComponent(company!.prefix)}/apps/chat/connect?${new URLSearchParams({ provider: endpoint.provider, resume: endpoint.id })}`, reason, kind),
     };
   }
 
@@ -430,7 +431,7 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
     if (!(await assertEndpointManagementAccess(req, res))) return;
     res.set("Cache-Control", "no-store");
     if (req.actor.type === "agent") {
-      res.json(await setupHandoff(req, "The responsible user must rotate and enter the webhook signing secret in GitHub."));
+      res.json(await setupHandoff(req, "The responsible user must rotate and enter the webhook signing secret in GitHub.", "enter_credentials"));
       return;
     }
     res

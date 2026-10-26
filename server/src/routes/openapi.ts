@@ -2566,9 +2566,23 @@ registry.registerPath({
   tags: ["chat-channels"],
   summary: "Generate a GitHub webhook secret",
   description:
-    "Generates and vaults a new GitHub webhook secret. The plaintext value is returned exactly once for entry in GitHub; normal endpoint reads expose only whether one is configured. Regeneration immediately rotates the server-side value.",
+    "Authorized agents receive a saved human setup handoff without rotating or reading the signing secret. A human session generates and vaults a new secret, returned exactly once for entry in GitHub. Normal endpoint reads expose only whether one is configured. Human regeneration immediately rotates the server-side value.",
   request: { params: z.object({ endpointId: z.string().uuid() }) },
   responses: {
+    200: r.ok(z.object({
+      status: z.literal("needs_user_action"),
+      interactionId: z.string().uuid().nullable(),
+      endpointId: z.string().uuid(),
+      connectionId: z.string().uuid(),
+      requiredUserAction: z.object({
+        kind: z.literal("enter_credentials"),
+        userId: z.string(),
+        resource: z.object({ type: z.literal("chat_endpoint"), id: z.string().uuid(), companyId: z.string().uuid() }),
+        setupPath: z.string(),
+        reason: z.string(),
+        continuation: z.string(),
+      }),
+    })),
     201: r.ok(chatEndpointSetupSecretResponseSchema),
     401: r.unauthorized,
     403: r.forbidden,
