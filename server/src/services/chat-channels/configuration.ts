@@ -1,4 +1,5 @@
 import type { ConnectionManagementContext } from "../connection-management.js";
+import { CHAT_HUMAN_CREDENTIAL_FIELDS } from "./credentials.js";
 import { preparePhotonConfiguration, createPhotonConfiguration } from "./imessage-photon/setup.js";
 import { slackRuntimeConfig } from "./slack/setup.js";
 import { createTelegramSetup } from "./telegram/setup.js";
@@ -147,11 +148,11 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
       }
       // These keys establish provider authentication or inbound trust. They
       // must come from the human setup step or a verified provider handoff.
-      if (managementContext?.actor.type === "agent" && suppliedCredentialKeys.some(
-        key => ["signingSecret", "webhookSecret", "privateKey", "clientSecret", "projectSecret"].includes(key),
-      )) {
+      const credentialFields = CHAT_HUMAN_CREDENTIAL_FIELDS.filter(key => suppliedCredentialKeys.includes(key));
+      if (managementContext?.actor.type === "agent" && credentialFields.length) {
         throw forbidden("The responsible user must enter provider verification credentials in the saved setup", {
           code: "chat_endpoint_credential_entry_requires_human",
+          credentialFields,
         });
       }
     }
@@ -285,6 +286,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
           prepared.credentials,
           credentialLease,
           actorUserId,
+          managementContext ? async () => managementContext.reauthorize() : undefined,
         );
       }
       credentials = prepared.credentials;
@@ -676,6 +678,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
               `${PROVIDER_LABELS[endpoint.provider]} credentials are required`,
             );
           });
+    await managementContext?.reauthorize();
     if (endpoint.provider === "imessage-photon") {
       credentials = preparePhotonConfiguration(endpoint, input, credentials);
     }
@@ -769,6 +772,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
         credentials,
         credentialLease,
         actorUserId,
+        managementContext ? async () => managementContext.reauthorize() : undefined,
       );
     if (prepared.inventory)
       await reconcileProviderResourceRows(

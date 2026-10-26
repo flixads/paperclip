@@ -262,6 +262,8 @@ describe("connection management with production default agents", () => {
     const address = remote.address();
     if (!address || typeof address === "string") throw new Error("Fixture did not listen");
     const mcpUrl = `http://127.0.0.1:${address.port}/mcp`;
+    const freezeRateClock = ["other-agent-caller-rate", "other-agent-shared-rate", "rate-limit", "agent-rate-approval"].includes(revocation);
+    if (freezeRateClock) vi.useFakeTimers({ toFake: ["Date"] });
     try {
       const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Governed test", transport: "mcp_remote", authKind: "none", transportConfig: { url: mcpUrl } });
       await server.db.update(toolConnections).set({ healthStatus: "ok" }).where(eq(toolConnections.id, created.body.id));
@@ -386,7 +388,7 @@ describe("connection management with production default agents", () => {
       else expect(settled, JSON.stringify(settled)).toMatchObject({ status: allowed ? "succeeded" : "failed" });
       expect(calls).toBe(allowed ? 1 : 0);
       if (allowed) { expect((await approve()).status).toBe(200); expect(calls).toBe(1); }
-    } finally { remote.closeAllConnections(); await new Promise<void>((resolve, reject) => remote.close(error => error ? reject(error) : resolve())); }
+    } finally { if (freezeRateClock) vi.useRealTimers(); remote.closeAllConnections(); await new Promise<void>((resolve, reject) => remote.close(error => error ? reject(error) : resolve())); }
   });
 
   it("completes concurrent run-authenticated profile finishing and policy writes without lock-order failures", async () => {
@@ -643,8 +645,12 @@ describe("connection management with production default agents", () => {
     const botId = `U${f.agentId.replaceAll("-", "").toUpperCase()}`;
     const scopes = [...SLACK_CHAT_BOT_SCOPES, ...SLACK_BOT_TOOL_SCOPES];
     let sent = 0;
+    let revokeDuringAuth = false;
     provider = async (url, init) => {
-      if (url.endsWith("auth.test")) return Response.json({ ok: true, team_id: "TFIXTURE", team: "Fixture workspace", user_id: botId, user: "fixture-bot" }, { headers: { "x-oauth-scopes": scopes.join(",") } });
+      if (url.endsWith("auth.test")) {
+        if (revokeDuringAuth) await accessService(server.db).ensureMembership(f.companyId, "user", f.userId, "operator", "suspended");
+        return Response.json({ ok: true, team_id: "TFIXTURE", team: "Fixture workspace", user_id: botId, user: "fixture-bot" }, { headers: { "x-oauth-scopes": scopes.join(",") } });
+      }
       if (url.includes("conversations.list")) return Response.json({ ok: true, channels: [], response_metadata: { next_cursor: "" } });
       if (url.endsWith("users.info")) return Response.json({ ok: true, user: { id: new URLSearchParams(String(init?.body)).get("user") ?? "UHUMAN", team_id: "TFIXTURE", name: "Fixture user", is_bot: false, deleted: false } });
       if (url.endsWith("chat.postMessage")) { sent++; return Response.json({ ok: true, channel: "DTEST", ts: "1.000001" }); }
@@ -660,17 +666,25 @@ describe("connection management with production default agents", () => {
       const configured = { status: configuredResponse.status, body: await configuredResponse.json() };
       expect(configured, JSON.stringify(configured)).toMatchObject({ status: 200 });
       expect(JSON.stringify(configured.body)).not.toContain("xoxb-fixture-token");
+      const [configuredEndpoint] = await server.db.select().from(chatEndpoints).where(eq(chatEndpoints.id, created.body.id));
+      await server.db.update(chatEndpoints).set({ status: "active", setup: { ...configuredEndpoint.setup, step: "complete", webhookVerifiedAt: new Date().toISOString() } }).where(eq(chatEndpoints.id, created.body.id));
       const [before] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
       const botTokenRef = before.credentialSecretRefs.find(ref => ref.configPath === "credentials.botToken")!;
       const rebound = before.credentialSecretRefs.map(ref => ref.configPath === "credentials.signingSecret" ? { ...ref, secretId: botTokenRef.secretId } : ref);
       expect(await f.request("PATCH", `/tool-connections/${created.body.connectionId}`, { credentialSecretRefs: rebound }, f.jwt))
         .toMatchObject({ status: 403, body: { code: "chat_endpoint_credentials_require_setup" } });
+      let credentialIntentId: string | undefined;
       for (const action of ["reconnect", "configure"] as const) for (const token of [f.key.token, f.jwt]) {
         const chosen = "agent-chosen-webhook-key";
         const handoff = await f.request("POST", setupPath, { action, credentials: { signingSecret: chosen } }, token);
         expect(handoff, JSON.stringify(handoff)).toMatchObject({ status: 200, body: { status: "needs_user_action", endpointId: created.body.id,
           requiredUserAction: { kind: "enter_credentials", userId: f.userId, resource: { id: created.body.id } } } });
         expect(JSON.stringify(handoff.body)).not.toContain(chosen);
+        expect(handoff.body.requiredUserAction.setupPath).toContain("stage=credentials&reconnect=1");
+        if (token === f.jwt) {
+          if (credentialIntentId) expect(handoff.body.interactionId).toBe(credentialIntentId);
+          credentialIntentId = handoff.body.interactionId;
+        }
         const [after] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
         expect(after.credentialSecretRefs).toEqual(before.credentialSecretRefs);
         const signing = after.credentialSecretRefs.find(ref => ref.configPath === "credentials.signingSecret")!;
@@ -678,8 +692,46 @@ describe("connection management with production default agents", () => {
           accessContext: { consumerType: "system", consumerId: "integration-fixture", actorType: "system" },
         })).toBe("fixture-signing-secret");
       }
+      const [credentialIntent] = await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, credentialIntentId!));
+      const [task] = await server.db.select().from(issues).where(eq(issues.id, f.issueId));
+      const entryProof = (credentialIntent.payload as { savedSetup: { credentialEntry: { previousGenerations: Record<string, string>; requireAll: boolean } } }).savedSetup.credentialEntry;
+      expect(entryProof).toEqual({ previousGenerations: { signingSecret: expect.any(String) }, requireAll: true });
+      expect(await findSatisfiedToolConnection(server.db, task, credentialIntent)).toBeNull();
+      await satisfiedConnectionIntentService(server.db).sweepPending();
+      expect((await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, credentialIntentId!)))[0].status).toBe("pending");
       // Ordinary write-only bot-token repair remains delegated under current authority.
       expect(await f.request("POST", setupPath, { action: "reconnect", credentials: { botToken: "xoxb-fixture-token" } }, f.jwt)).toMatchObject({ status: 200, body: { id: created.body.id } });
+      const healthy = async () => {
+        await server.db.update(chatEndpoints).set({ status: "active" }).where(eq(chatEndpoints.id, created.body.id));
+        await server.db.update(toolConnections).set({ status: "active", enabled: true, healthStatus: "healthy" }).where(eq(toolConnections.id, created.body.connectionId));
+      };
+      await healthy();
+      expect(await findSatisfiedToolConnection(server.db, task, credentialIntent)).toBeNull();
+      const humanReconnect = async (signingSecret: string) => {
+        const response = await fetch(server.apiUrl + "/api" + setupPath, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "reconnect", credentials: { signingSecret } }) });
+        expect({ status: response.status, body: await response.json() }).toMatchObject({ status: 200 });
+      };
+      await humanReconnect("fixture-signing-secret");
+      await healthy();
+      expect(await findSatisfiedToolConnection(server.db, task, credentialIntent)).toBeNull();
+      await humanReconnect("human-replacement-signing-secret");
+      expect(await findSatisfiedToolConnection(server.db, task, credentialIntent)).toBeNull();
+      const resumedRequest = await f.request("POST", setupPath, { action: "reconnect", credentials: { signingSecret: "agent-chosen-webhook-key" } }, f.jwt);
+      expect(resumedRequest.body.interactionId).toBe(credentialIntentId);
+      expect((await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, credentialIntentId!)))[0].payload)
+        .toMatchObject({ savedSetup: { credentialEntry: entryProof } });
+      await healthy();
+      expect(await findSatisfiedToolConnection(server.db, task, credentialIntent)).toBeNull();
+      const [repaired] = await server.db.select().from(chatEndpoints).where(eq(chatEndpoints.id, created.body.id));
+      await server.db.update(chatEndpoints).set({ setup: { ...repaired.setup, webhookVerifiedAt: new Date().toISOString() } }).where(eq(chatEndpoints.id, created.body.id));
+      expect((await findSatisfiedToolConnection(server.db, task, credentialIntent))?.id).toBe(created.body.connectionId);
+      expect(await findSatisfiedToolConnection(server.db, { ...task, status: "cancelled" }, credentialIntent)).toBeNull();
+      await accessService(server.db).ensureMembership(f.companyId, "user", f.userId, "operator", "suspended");
+      expect(await findSatisfiedToolConnection(server.db, task, credentialIntent)).toBeNull();
+      await accessService(server.db).ensureMembership(f.companyId, "user", f.userId, "operator", "active");
+      await satisfiedConnectionIntentService(server.db).sweepPending();
+      expect((await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, credentialIntentId!)))[0].status).toBe("expired");
       // Identity is a provider fixture; production HTTP admission and policy remain real.
       const [principal] = await server.db.insert(chatExternalPrincipals).values({ companyId: f.companyId, provider: "slack", providerAccountId: "TFIXTURE", externalId: "UHUMAN", isBot: false }).returning();
       await server.db.insert(chatIdentityLinks).values({ companyId: f.companyId, endpointId: created.body.id, principalId: principal.id, paperclipUserId: f.userId, status: "linked", confirmedAt: new Date() });
@@ -690,6 +742,7 @@ describe("connection management with production default agents", () => {
       expect(denied, JSON.stringify(denied)).toMatchObject({ status: 403 });
       expect(sent).toBe(0);
       await server.db.update(toolPolicies).set({ policyType: "allow" }).where(eq(toolPolicies.id, deny.id));
+      vi.useFakeTimers({ toFake: ["Date"] });
       await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "One Slack setup send", policyType: "rate_limit", selectors: { connectionId: created.body.connectionId }, priority: 0, config: { limit: 1, windowSeconds: 60, keyBy: ["agent", "tool"] } });
       const requestId = randomUUID();
       const tested = await f.request("POST", testPath, { requestId });
@@ -698,7 +751,13 @@ describe("connection management with production default agents", () => {
       expect(await f.request("POST", testPath, { requestId: randomUUID() })).toMatchObject({ status: 403, body: { details: { reasonCode: "rate_limited" } } });
       expect(await f.request("POST", testPath, { requestId: randomUUID(), slackUserId: "UOTHER" })).toMatchObject({ status: 403 });
       expect(sent).toBe(1);
-    } finally { provider = null; }
+      vi.useRealTimers();
+      const [beforeRevocation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      revokeDuringAuth = true;
+      expect(await f.request("POST", setupPath, { action: "reconnect", credentials: { botToken: "xoxb-fixture-token" } }, f.jwt)).toMatchObject({ status: 403 });
+      expect((await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId)))[0].credentialSecretRefs)
+        .toEqual(beforeRevocation.credentialSecretRefs);
+    } finally { vi.useRealTimers(); provider = null; }
   });
 
   it("imports a GitHub App and discovers repositories against provider fixtures", async () => {

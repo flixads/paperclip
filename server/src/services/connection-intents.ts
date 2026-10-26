@@ -1,4 +1,5 @@
 import { connectionManagementService } from "./connection-management.js";
+import { CHAT_HUMAN_CREDENTIAL_FIELDS, chatCredentialEntryGenerations } from "./chat-channels/credentials.js";
 import { updateAgentConfigurationInTransaction } from "./agent-configuration-transaction.js";
 import { emailChannelService } from "./email-channels.js";
 import { emailConnectionService } from "./email-connections.js";
@@ -74,7 +75,7 @@ export function chatCredentialRotationId(setup: object): string | null {
 
 export function savedChatSetupPath(prefix: string, endpoint: { id: string; provider: string }, action?: SavedChatSetup["action"], previousRotationId?: string | null) {
   const query = new URLSearchParams({ provider: endpoint.provider, resume: endpoint.id });
-  if (action === "enter_credentials" || action === "rotate_credentials") query.set("stage", "credentials");
+  if (action === "enter_credentials" || action === "rotate_credentials") { query.set("stage", "credentials"); query.set("reconnect", "1"); }
   if (action === "confirm_identity") query.set("stage", "identity");
   if (action === "rotate_credentials") { query.set("reconnect", "1"); query.set("rotateSecret", "1"); query.set("afterRotationId", previousRotationId ?? "none"); }
   return `/${encodeURIComponent(prefix)}/apps/chat/connect?${query}`;
@@ -893,7 +894,7 @@ export function connectionIntentService(db: Db) {
     return { ...row, interaction };
   }
 
-  async function requestChatHandoff(claims: ConnectionRunClaims, endpointId: string, options: { action?: SavedChatSetup["action"] } = {}) {
+  async function requestChatHandoff(claims: ConnectionRunClaims, endpointId: string, options: { action?: SavedChatSetup["action"]; credentialFields?: string[] } = {}) {
     const context = await loadRunContext(claims);
     const [endpoint] = await db.select().from(chatEndpoints).where(and(eq(chatEndpoints.id, endpointId), eq(chatEndpoints.companyId, context.run.companyId)));
     if (!endpoint || endpoint.assignedAgentId !== context.agent.id) throw forbidden("This setup is not assigned to the requesting agent");
@@ -901,14 +902,18 @@ export function connectionIntentService(db: Db) {
       agentId: context.agent.id, runId: context.run.id, onBehalfOfUserId: context.run.responsibleUserId,
     }, "connections:configure", { type: "connection_management", companyId: context.run.companyId,
       connectionId: endpoint.connectionId, provider: endpoint.provider, purpose: "chat", operation: "chat.authentication_handoff" });
+    const credentialFields = CHAT_HUMAN_CREDENTIAL_FIELDS.filter(field => !options.credentialFields || options.credentialFields.includes(field));
+    if (options.action === "enter_credentials" && !credentialFields.length) throw unprocessable("Credential entry requires a supported verification field");
+    const generations = chatCredentialEntryGenerations(endpoint.setup);
     const interaction = await interactions.createConnectionIntent(context.issue, {
       payload: { version: 1, serviceSlug: endpoint.provider, serviceName: endpoint.provider === "github" ? "GitHub" : endpoint.provider === "slack" ? "Slack" : endpoint.provider,
         purpose: "channel", savedSetup: { endpointId: endpoint.id, connectionId: endpoint.connectionId,
           ...(options.action ? { action: options.action } : {}),
+          ...(options.action === "enter_credentials" ? { credentialEntry: { previousGenerations: Object.fromEntries(credentialFields.map(field => [field, generations[field]])), requireAll: !!options.credentialFields } } : {}),
           ...(options.action === "rotate_credentials" ? { credentialRotation: { previousId: chatCredentialRotationId(endpoint.setup) } } : {}) },
         requestingAgentId: context.agent.id, requestingAgentName: context.agent.name, phase: "authorizing" },
       sourceRunId: context.run.id, sourceIdentityContextId: context.run.activeIdentityContextId,
-      addresseeUserId: context.run.responsibleUserId!, idempotencyKey: `chat-${options.action ?? "authentication"}:${context.issue.id}:${context.run.responsibleUserId}:${endpoint.id}${options.action === "rotate_credentials" ? `:${context.run.id}` : ""}`,
+      addresseeUserId: context.run.responsibleUserId!, idempotencyKey: `chat-${options.action ?? "authentication"}:${context.issue.id}:${context.run.responsibleUserId}:${endpoint.id}${options.action === "rotate_credentials" || options.action === "enter_credentials" ? `:${context.run.id}` : ""}`,
     });
     if (interaction.status !== "pending") throw conflict("This setup request has already been resolved. Follow its recorded outcome.");
     return { interactionId: interaction.id, previousRotationId: connectionIntentPayloadSchema.parse(interaction.payload).savedSetup?.credentialRotation?.previousId ?? null };

@@ -105,13 +105,13 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
   const access = accessService(db);
   const github = githubChatManagementService(db, options.fetch);
 
-  async function setupHandoff(req: ExpressRequest, reason: string, kind: ConnectionRequiredUserAction["kind"] = "authenticate", options: { requireCredentialRotation?: boolean } = {}) {
+  async function setupHandoff(req: ExpressRequest, reason: string, kind: ConnectionRequiredUserAction["kind"] = "authenticate", options: { requireCredentialRotation?: boolean; credentialFields?: string[] } = {}) {
     const endpoint = await service.get(endpointId(req));
     const [company] = await db.select({ prefix: companies.issuePrefix }).from(companies).where(eq(companies.id, endpoint.companyId));
     const action = options.requireCredentialRotation ? "rotate_credentials" as const : kind === "enter_credentials" || kind === "confirm_identity" ? kind : undefined;
     const handoff = req.actor.type === "agent" && req.actor.runId && endpoint.assignedAgentId === req.actor.agentId
       ? await connectionIntentService(db).requestChatHandoff({ sub: req.actor.agentId!, company_id: endpoint.companyId,
-          run_id: req.actor.runId, responsible_user_id: connectionRequestUserId(req)! }, endpoint.id, { action })
+          run_id: req.actor.runId, responsible_user_id: connectionRequestUserId(req)! }, endpoint.id, { action, credentialFields: options.credentialFields })
       : null;
     const interactionId = handoff?.interactionId ?? null;
     const previousRotationId = handoff ? handoff.previousRotationId : chatCredentialRotationId(endpoint.setup);
@@ -440,7 +440,9 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
         if (req.actor.type !== "agent" || !(error instanceof HttpError) || error.status !== 403
           || !error.details || typeof error.details !== "object" || !("code" in error.details)
           || error.details.code !== "chat_endpoint_credential_entry_requires_human") throw error;
-        res.json(await setupHandoff(req, "The responsible user must enter provider verification credentials in the saved setup.", "enter_credentials"));
+        const credentialFields = "credentialFields" in error.details && Array.isArray(error.details.credentialFields)
+          ? error.details.credentialFields.filter((field): field is string => typeof field === "string") : undefined;
+        res.json(await setupHandoff(req, "The responsible user must enter provider verification credentials in the saved setup.", "enter_credentials", { credentialFields }));
       }
     },
   );
