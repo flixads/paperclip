@@ -96,6 +96,34 @@ describe("connection management with production default agents", () => {
     expect(profile, JSON.stringify(profile)).toMatchObject({ status: 201 });
   });
 
+  it("checks effective-profile connection access once for hundreds of tools on the same account", async () => {
+    const f = await fixture();
+    const connection = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Large catalog", transport: "mcp_remote", authKind: "none", config: { url: "https://1.1.1.1/mcp" } });
+    expect(connection).toMatchObject({ status: 201 });
+    await server.db.insert(toolCatalogEntries).values(Array.from({ length: 200 }, (_, index) => ({ companyId: f.companyId, applicationId: connection.body.applicationId, connectionId: connection.body.id, name: `tool_${index}`, toolName: `tool_${index}`, versionHash: `fixture_${index}` })));
+    const profile = await f.request("POST", `/companies/${f.companyId}/tools/profiles`, { profileKey: "large-catalog", name: "Large catalog", entries: [{ selectorType: "connection", connectionId: connection.body.id }] });
+    expect(profile).toMatchObject({ status: 201 });
+    expect(await f.request("POST", `/companies/${f.companyId}/tools/profiles/${profile.body.id}/bind`, { targetType: "agent", targetId: f.agentId })).toMatchObject({ status: 201 });
+    expect(await f.request("PUT", `/tool-connections/${connection.body.id}/installs`, { installs: [{ targetType: "agent", targetId: f.agentId }] })).toMatchObject({ status: 200 });
+    const module = await import("../services/connection-management.js");
+    const original = connectionManagementService;
+    let connectionChecks = 0;
+    const factory = vi.spyOn(module, "connectionManagementService").mockImplementation((...args) => {
+      const service = original(...args);
+      return { ...service, capability: async (...input: Parameters<typeof service.capability>) => {
+        if (input[2].connectionId === connection.body.id) connectionChecks++;
+        return service.capability(...input);
+      } };
+    });
+    try {
+      const effective = await f.request("GET", `/companies/${f.companyId}/tools/profiles/effective/agents/${f.agentId}`);
+      expect(effective, JSON.stringify(effective)).toMatchObject({ status: 200 });
+      expect(effective.body.allowedTools).toHaveLength(200);
+      expect(effective.body.installedConnections).toHaveLength(1);
+      expect(connectionChecks).toBe(1);
+    } finally { factory.mockRestore(); }
+  });
+
   it("checks every saved profile selector and effective projection against personal account visibility", async () => {
     const f = await fixture();
     const first = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Owned profile account", transport: "mcp_remote", authKind: "none", config: { url: "https://1.1.1.1/mcp" } });
