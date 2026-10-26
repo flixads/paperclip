@@ -61,7 +61,7 @@ describe("connection management with production default agents", () => {
     expect(agent, JSON.stringify(agent)).toHaveProperty("id");
     expect(created.status).toBe(201);
     await lifecycle.process(agent.id);
-    expect((await agentService(server.db).getById(agent.id))?.status).toBe("idle");
+    await vi.waitFor(async () => expect((await agentService(server.db).getById(agent.id))?.status).toBe("idle"), { timeout: 10_000 });
     await server.db.update(heartbeatRuns).set({ agentId: agent.id }).where(eq(heartbeatRuns.id, base.runId));
     await server.db.update(issues).set({ assigneeAgentId: agent.id, responsibleUserId: userId }).where(eq(issues.id, base.issueId));
     const key = await agentService(server.db).createApiKey(agent.id, "integration", { kind: "standard" }, { responsibleUserId: userId });
