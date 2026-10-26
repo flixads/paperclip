@@ -58,8 +58,8 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 ### `post-chat-endpoints-slack-managed-authorize`
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/managed/authorize`; JSON REST.
-Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Agent access: `available` — agent REST and default native `search_api` / `call_api` return a saved `requiredUserAction` handoff. The responsible user must open that setup, bind their browser session, and consent to Slack access. An agent call does not start provider consent.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Current agent and responsible-user authority bound the request. The addressed human starts the existing session-bound Slack authorization flow; callback state and subject checks remain enforced.
 Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
@@ -103,8 +103,8 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 ### `post-chat-endpoints-slack-install`
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/install`; JSON REST.
-Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Agent access: `available` — agent REST and default native `search_api` / `call_api` return a saved `requiredUserAction` handoff. The responsible user must open that setup, bind their browser session, and consent to the Slack installation. An agent call does not start installation consent.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Current agent and responsible-user authority bound the request. Only the addressed human starts session-bound installation; callback state and subject checks remain enforced.
 Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
@@ -268,7 +268,7 @@ API: `present` — `POST /api/chat-endpoints/{endpointId}/setup`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`. Agent-supplied signing/webhook secrets, private keys, client secrets, and project secrets return a saved human credential-entry handoff. Authorized write-only bot-token and API-key setup remains delegated.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). The service rejects delegated verification-key entry before provider work or vault writes. Human sessions and verified provider handoffs retain credential entry; agent configuration uses the responsible user's current authority.
 Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
-Verification: `passed` — actual key/JWT configure/reconnect requests return the addressed handoff with unchanged secret refs and vault signing value. A human session configures Slack; an agent can repair its bot token and send a policy-governed test message. Native setup receipts are protected. No live provider qualification.
+Verification: `passed` — actual key/JWT configure/reconnect requests return the addressed handoff with unchanged secret refs and vault signing value. The saved card stays pending through old health, bot-token repair, unchanged signing-key entry and retries. It completes only after a protected value change, renewed webhook verification and current authority; cancellation or user revocation still denies continuation. Credential-write revocation during provider authentication leaves refs unchanged. A human session configures Slack; an agent can repair its bot token and send a policy-governed test message. Native setup receipts are protected. No live provider qualification.
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-setup-secret`
