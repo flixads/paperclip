@@ -564,6 +564,8 @@ export const toolMcpGatewayTokens = pgTable(
     subjectType: text("subject_type").$type<ToolMcpGatewayTokenSubjectType>().notNull().default("gateway_client"),
     subjectId: text("subject_id"),
     clientLabel: text("client_label").notNull().default(""),
+    // Null distinguishes board/legacy clients from delegated agent clients.
+    responsibleUserId: text("responsible_user_id"),
     ownerNote: text("owner_note").notNull().default(""),
     allowedActions: jsonb("allowed_actions").$type<ToolMcpGatewayTokenAction[]>().notNull().default(["tools/list", "tools/call"]),
     expiresAt: timestamp("expires_at", { withTimezone: true }),

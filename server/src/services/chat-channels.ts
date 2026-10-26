@@ -12,6 +12,7 @@ import { applyChatTaskReviewContainment } from "./chat-channels/inbound/task-tru
 import { photonConversationBindingIsComplete, photonControlTargetsConversation, photonReplyMetadata, recordPhotonInboundActivity } from "./chat-channels/imessage-photon/messages.js";
 import { deferTeamsSetupReply } from "./chat-channels/microsoft-teams/setup-replies.js";
 import { slackOrphanFollowUp, stripSlackTitleMentions, slackMessageMeetsMentionRequirement } from "./chat-channels/slack/messages.js";
+import type { ConnectionManagementContext } from "./connection-management.js";
 import { createChatPublicationResolution } from "./chat-channels/publications/resolution.js";
 import { createChatPublicationRequests } from "./chat-channels/publications/requests.js";
 import { createTeamsBoardSendPreparation } from "./chat-channels/microsoft-teams/board-send-preparation.js";
@@ -3479,7 +3480,7 @@ return {
     configure,
     inspectPhoton,
     test,
-    finishSlackSetup: (endpointId: string, userId: string) => test(endpointId, { optionalSlackTestForUser: userId }),
+    finishSlackSetup: (endpointId: string, userId: string, managementContext?: ConnectionManagementContext) => test(endpointId, { optionalSlackTestForUser: userId }, managementContext),
     setupTestStatus,
     handleWebhook,
     listResources,

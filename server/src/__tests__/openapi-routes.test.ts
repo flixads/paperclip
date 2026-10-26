@@ -407,13 +407,13 @@ describe("openapi routes", () => {
     expect(operation.responses["503"]).toBeDefined();
   });
 
-  it("documents board-only pool management with revision-checked deletion", () => {
+  it("documents delegated pool management with revision-checked deletion", () => {
     const { spec } = loadSpecRoutes();
     const pools = spec.paths["/api/companies/{companyId}/ai-connection-pools"];
     const remove = spec.paths["/api/companies/{companyId}/ai-connection-pools/{poolId}"].delete;
     const inspection = spec.paths["/api/companies/{companyId}/ai-connection-pools/{poolId}/inspection"].get;
     for (const operation of [pools.get, pools.post, remove, inspection]) {
-      expect(operation.security).toEqual([{ BoardSessionAuth: [] }, { BoardApiKeyAuth: [] }]);
+      expect(operation.security).toEqual([{ BoardSessionAuth: [] }, { BoardApiKeyAuth: [] }, { AgentBearerAuth: [] }]);
     }
     expect(remove.requestBody.required).toBe(true);
     expect(remove.requestBody.content["application/json"].schema).toMatchObject({
@@ -616,7 +616,7 @@ describe("openapi routes", () => {
     ).not.toContain("sessionToken");
   });
 
-  it("publishes the complete board contract for chat channels", () => {
+  it("publishes delegated chat configuration and human-only confirmation boundaries", () => {
     const { spec } = loadSpecRoutes();
     const boardSecurity = [{ BoardSessionAuth: [] }, { BoardApiKeyAuth: [] }];
     const operations = [
@@ -678,6 +678,13 @@ describe("openapi routes", () => {
       ],
     ] as const;
 
+    const humanOnly = new Set([
+      "/api/chat-endpoints/{endpointId}/deliveries/{deliveryId}/replay",
+      "/api/chat-endpoints/{endpointId}/publications/{publicationId}/replay",
+      "/api/chat-endpoints/{endpointId}/conversations/{conversationId}/publications",
+      "/api/chat-endpoints/{endpointId}/github/identity", "/api/chat-identity-links/preview", "/api/chat-identity-links/confirm",
+      "/api/chat-endpoints/{endpointId}/publications/{publicationId}/resolve", "/api/chat-endpoints/{endpointId}/actions/{actionId}/resolve",
+    ]);
     for (const [method, routePath] of operations) {
       const operation = spec.paths[routePath]?.[method];
       expect(
@@ -686,10 +693,10 @@ describe("openapi routes", () => {
       ).toBeDefined();
       expect(
         operation.security,
-        `${method.toUpperCase()} ${routePath} is board-only`,
-      ).toEqual(boardSecurity);
+        `${method.toUpperCase()} ${routePath} retains its actor boundary`,
+      ).toEqual(humanOnly.has(routePath) ? boardSecurity : [...boardSecurity, { AgentBearerAuth: [] }]);
       expect(operation["x-paperclip-authorization"]).toEqual({
-        actor: "board",
+        actor: humanOnly.has(routePath) ? "board" : "board_or_agent",
       });
       expect(operation.tags).toContain("chat-channels");
     }
@@ -1074,12 +1081,12 @@ describe("openapi routes", () => {
     expect(replacement.responses["422"]).toBeDefined();
   });
 
-  it("documents the manager-only GitHub wizard and compatible owner-aware registration", () => {
+  it("documents delegated GitHub setup with human identity confirmation and compatible owner-aware registration", () => {
     const { spec } = loadSpecRoutes();
     for (const [suffix, method] of [["draft", "put"], ["setup", "post"], ["identity/start", "post"], ["identity/confirm", "post"]]) {
       const operation = spec.paths[`/api/chat-endpoints/{endpointId}/github/${suffix}`][method];
-      expect(operation["x-paperclip-authorization"]).toEqual({ actor: "board" });
-      expect(operation.security).toEqual([{ BoardSessionAuth: [] }, { BoardApiKeyAuth: [] }]);
+      expect(operation["x-paperclip-authorization"]).toEqual({ actor: suffix === "identity/confirm" ? "board" : "board_or_agent" });
+      expect(operation.security).toEqual([{ BoardSessionAuth: [] }, { BoardApiKeyAuth: [] }, ...(suffix === "identity/confirm" ? [] : [{ AgentBearerAuth: [] }])]);
     }
     const registration = spec.paths["/api/chat-endpoints/{endpointId}/github/registration"].post;
     const input = registration.requestBody.content["application/json"].schema;
@@ -1095,7 +1102,7 @@ describe("openapi routes", () => {
     const setup = spec.paths[root + "setup"].post.responses["200"].content["application/json"].schema;
     expect(setup.properties.restartableRegistrationId.format).toBe("uuid");
     const restart = spec.paths[root + "registration/restart"].post;
-    expect(restart["x-paperclip-authorization"]).toEqual({ actor: "board" });
+    expect(restart["x-paperclip-authorization"]).toEqual({ actor: "board_or_agent" });
     const restartInput = restart.requestBody.content["application/json"].schema;
     expect(restartInput.required).toEqual(expect.arrayContaining(["registrationId", "appNotCreated"]));
     expect(restartInput.properties.appNotCreated.enum ?? [restartInput.properties.appNotCreated.const]).toEqual([true]);
@@ -1109,7 +1116,7 @@ describe("openapi routes", () => {
     const page = spec.paths[root + "repositories"].get;
     expect(page.parameters.map((param: { name: string }) => param.name)).toEqual(expect.arrayContaining(["endpointId", "offset", "limit", "search"]));
     expect(page.responses["200"].content["application/json"].schema.properties).toHaveProperty("totalCount");
-    expect(spec.paths[root + "repositories/access"].put["x-paperclip-authorization"]).toEqual({ actor: "board" });
+    expect(spec.paths[root + "repositories/access"].put["x-paperclip-authorization"]).toEqual({ actor: "board_or_agent" });
     const review = spec.paths[root + "reviews/{reviewId}"].get;
     expect(review.parameters.map((param: { name: string }) => param.name)).toEqual(["endpointId", "reviewId"]);
     expect(review.responses["404"]).toBeDefined();

@@ -1,6 +1,7 @@
 import { enqueueTerminalIssueInteractionChatPublications } from "./chat-interaction-publications.js";
+import { connectionManagementService } from "./connection-management.js";
 import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
-import { approvals, companyMemberships, connectionIntentDeliveries, issueApprovals, issueThreadInteractions, issues, type Db } from "@paperclipai/db";
+import { approvals, chatEndpoints, toolConnections, companyMemberships, connectionIntentDeliveries, issueApprovals, issueThreadInteractions, issues, type Db } from "@paperclipai/db";
 import { connectionIntentPayloadSchema } from "@paperclipai/shared";
 import { logActivity, publishActivity, type ActivityPublication } from "./activity-log.js";
 import { connectionIntentService } from "./connection-intents.js";
@@ -19,6 +20,22 @@ async function findAvailableToolConnection(db: Db, task: Task, intent: Intent, p
   const parsed = connectionIntentPayloadSchema.safeParse(intent.payload);
   if (!parsed.success) return null;
   const payload = parsed.data;
+  if (payload.savedSetup && payload.purpose === "channel") {
+    if (payload.requestingAgentId !== task.assigneeAgentId || !intent.addresseeUserId) return null;
+    const [endpoint] = await db.select().from(chatEndpoints).where(and(eq(chatEndpoints.id, payload.savedSetup.endpointId),
+      eq(chatEndpoints.companyId, task.companyId), eq(chatEndpoints.connectionId, payload.savedSetup.connectionId),
+      eq(chatEndpoints.assignedAgentId, payload.requestingAgentId), eq(chatEndpoints.status, "active")));
+    if (!endpoint || endpoint.sponsorUserId !== intent.addresseeUserId) return null;
+    const [connection] = await db.select().from(toolConnections).where(and(eq(toolConnections.id, endpoint.connectionId),
+      eq(toolConnections.companyId, task.companyId), eq(toolConnections.status, "active"), eq(toolConnections.enabled, true)));
+    if (!connection || !["ok", "healthy"].includes(connection.healthStatus)) return null;
+    const capability = await connectionManagementService(db).capability({ type: "agent", agentId: payload.requestingAgentId,
+      companyId: task.companyId, onBehalfOfUserId: intent.addresseeUserId }, "connections:configure", {
+      type: "connection_management", companyId: task.companyId, connectionId: connection.id, projectId: task.projectId,
+      issueId: task.id, targetAgentId: payload.requestingAgentId, purpose: "chat", operation: "chat.authentication_handoff",
+    });
+    return capability.allowed ? connection : null;
+  }
   // Additional permissions, provider authentication and inbox setup still need
   // their governed completion paths. Aggregator cards also name an upstream app.
   if (payload.purpose || payload.accessRequest || payload.upstreamService

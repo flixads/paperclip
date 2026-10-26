@@ -176,7 +176,9 @@ export function emailConnectionService(
     input: EmailConnectionInput,
     actor: EmailActor,
   ) {
+    await actor.managementContext?.reauthorize();
     const identity = await agentmailApi(input.apiKey, fetchImpl).whoami();
+    await actor.managementContext?.reauthorize();
     return db.transaction(async (tx) => {
       const db = tx as unknown as Db;
       await db.execute(
@@ -252,8 +254,9 @@ export function emailConnectionService(
           ],
         },
         {
-          actorType: "user",
-          actorId: actor.userId ?? "board",
+          actorType: actor.agentId ? "agent" : "user",
+          actorId: actor.agentId ?? actor.userId ?? "board",
+          managementContext: actor.managementContext,
           actorSource: actor.localImplicit ? "local_implicit" : "session",
         },
       );
@@ -286,8 +289,9 @@ export function emailConnectionService(
               })),
         },
         {
-          actorType: "user",
-          actorId: actor.userId ?? "board",
+          actorType: actor.agentId ? "agent" : "user",
+          actorId: actor.agentId ?? actor.userId ?? "board",
+          managementContext: actor.managementContext,
           actorSource: actor.localImplicit ? "local_implicit" : "session",
         },
       );
@@ -298,8 +302,9 @@ export function emailConnectionService(
       }).where(eq(toolConnections.id, connection.id));
       await logActivity(db, {
         companyId,
-        actorType: "user",
-        actorId: actor.userId ?? "board",
+        actorType: actor.agentId ? "agent" : "user",
+        actorId: actor.agentId ?? actor.userId ?? "board",
+        ...actor.managementContext?.audit,
         action: "email.connection.created",
         entityType: "tool_connection",
         entityId: connection.id,
@@ -357,15 +362,17 @@ export function emailConnectionService(
           ],
         },
         {
-          actorType: "user",
-          actorId: actor.userId ?? "board",
+          actorType: actor.agentId ? "agent" : "user",
+          actorId: actor.agentId ?? actor.userId ?? "board",
+          managementContext: actor.managementContext,
           actorSource: actor.localImplicit ? "local_implicit" : "session",
         },
       );
       await logActivity(db, {
         companyId,
-        actorType: "user",
-        actorId: actor.userId ?? "board",
+        actorType: actor.agentId ? "agent" : "user",
+        actorId: actor.agentId ?? actor.userId ?? "board",
+        ...actor.managementContext?.audit,
         action: replaceInitialAccess ? "email.connection.agents_updated" : "email.connection.agent_added",
         entityType: "tool_connection",
         entityId: id,

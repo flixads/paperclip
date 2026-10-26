@@ -23,6 +23,7 @@ import { aiConnectionRouterService } from "../services/ai-connection-router.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { toolAccessService } from "../services/tool-access.js";
 import { waitForPendingRunFailureReports } from "../services/run-failure-report.js";
+import { accessService } from "../services/access.js";
 import { configureAgentLifecycle } from "../services/agent-lifecycle.js";
 
 const captureRunFailure = vi.hoisted(() => vi.fn());
@@ -61,6 +62,7 @@ async function fixture(provider: "anthropic" | "openai", method: "api_key" | "su
   const companyId = randomUUID();
   const agentId = randomUUID();
   const userId = `owner-${companyId}`;
+  await db.insert(authUsers).values({ id: userId, name: "Manager owner", email: `${userId}@fixture.invalid`, emailVerified: true, createdAt: new Date(), updatedAt: new Date() });
   const binding = { provider, method, mode: "responsible_user" } as const;
   const adapterType = provider === "anthropic" ? "claude_local" : "codex_local";
   await db.insert(authUsers).values({ id: userId, name: "Connection owner", email: `${userId}@example.test`,
@@ -69,6 +71,8 @@ async function fixture(provider: "anthropic" | "openai", method: "api_key" | "su
   await db.insert(companyMemberships).values({ companyId, principalType: "user", principalId: userId, membershipRole: "owner", status: "active" });
   await db.insert(principalPermissionGrants).values({ companyId, principalType: "user", principalId: userId, permissionKey: "agents:create" });
   await db.insert(agents).values({ id: agentId, companyId, name: "Manager", role: "ceo", adapterType, runtimeConfig: { aiConnection: binding } });
+  await accessService(db).ensureMembership(companyId, "agent", agentId, "member", "active");
+  await db.insert(principalPermissionGrants).values(["tools:manage_profiles", "agents:configure"].map(permissionKey => ({ companyId, principalType: "agent" as const, principalId: agentId, permissionKey })));
   const [run] = await db.insert(heartbeatRuns).values({ companyId, agentId, status: "running", responsibleUserId: userId }).returning();
   const app = express();
   app.use(express.json());

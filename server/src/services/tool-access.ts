@@ -1,3 +1,5 @@
+import type { ConnectionManagementContext } from "./connection-management.js";
+import { connectionActorUserId } from "./tool-access/actor.js";
 import { restConnectorFor } from "./connectors/rest-registry.js";
 import { createConnectionCredentialValidation } from "./tool-access/connections/credential-validation.js";
 import { createConnectionGrants } from "./tool-access/connections/grants.js";
@@ -1421,7 +1423,7 @@ export function toolAccessService(
         createdByAgentId:
           actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
         createdByUserId:
-          actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+          connectionActorUserId(actor),
       })
       .returning();
     return toProfileBinding(created);
@@ -1594,6 +1596,7 @@ export function toolAccessService(
     input: ConnectToolApp,
     actor?: ActorInfo,
   ): Promise<ConnectToolAppResult> {
+    await actor?.managementContext?.reauthorize();
     const definition = input.galleryKey
       ? getConnectableAppDefinition(input.galleryKey)
       : null;
@@ -1880,10 +1883,10 @@ export function toolAccessService(
       previousGrantKind &&
       input.grantKind &&
       previousGrantKind !== input.grantKind &&
-      actor?.actorType === "user" &&
-      actor.actorSource !== "local_implicit"
+      Boolean(connectionActorUserId(actor)) &&
+      actor?.actorSource !== "local_implicit"
     ) {
-      const actorUserId = actor.actorId;
+      const actorUserId = connectionActorUserId(actor);
       const [membership] = actorUserId
         ? await db
             .select({
@@ -2203,15 +2206,9 @@ export function toolAccessService(
     const credentialRefs: McpConnectionCredentialRef[] = [];
     const createdSecretIds: string[] = [];
     const createdDefinitionIds: string[] = [];
-    // "Just me" needs a named board user to own the consent. An agent actor
-    // cannot hold a personal identity, and silently falling back to a shared
-    // credential is exactly the mis-scoping the design forbids, so refuse.
-    const personalIdentityUserId =
-      requestedGrantKind === "user"
-        ? actor?.actorType === "user" && actor.actorId
-          ? actor.actorId
-          : null
-        : null;
+    // Personal consent belongs to the authenticated responsible user. A delegated
+    // agent is recorded separately and never becomes the account owner.
+    const personalIdentityUserId = requestedGrantKind === "user" ? connectionActorUserId(actor) : null;
     if (requestedGrantKind === "user" && !personalIdentityUserId) {
       throw badRequest(
         "Connecting an app as yourself requires a signed-in user",
@@ -2535,7 +2532,7 @@ export function toolAccessService(
             createdByAgentId:
               actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
             createdByUserId:
-              actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+              connectionActorUserId(actor),
           })
           .returning();
       }
@@ -3123,6 +3120,7 @@ export function toolAccessService(
     input: FinishToolApp,
     actor?: ActorInfo,
   ): Promise<FinishToolAppResult> {
+    await actor?.managementContext?.reauthorize();
     const connection = await getConnectionRow(connectionId, companyId);
     await assertConnectorConnectionSetupEnabled(connection);
     if (connection.status === "archived")
@@ -3409,7 +3407,7 @@ export function toolAccessService(
         if (added.length) await tx.insert(toolConnectionInstalls).values(added.map((binding) => ({
           companyId, connectionId: connection.id, targetType: binding.targetType, targetId: binding.targetId,
           createdByAgentId: actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
-          createdByUserId: actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+          createdByUserId: connectionActorUserId(actor),
         })));
         if (added.length || removed.length) await tx.insert(toolAccessAuditEvents).values({
           companyId, connectionId: connection.id, actorType: actor?.actorType ?? "system", actorId: actor?.actorId ?? null,
@@ -3430,7 +3428,7 @@ export function toolAccessService(
             createdByAgentId:
               actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
             createdByUserId:
-              actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+              connectionActorUserId(actor),
           })
           .returning();
         profileBindings.push(toProfileBinding(binding));
@@ -3446,7 +3444,7 @@ export function toolAccessService(
             reviewedByAgentId:
               actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
             reviewedByUserId:
-              actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+              connectionActorUserId(actor),
             quarantinedAt: null,
             quarantineReason: null,
             updatedAt: reviewedAt,
@@ -3469,7 +3467,7 @@ export function toolAccessService(
             reviewedByAgentId:
               actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
             reviewedByUserId:
-              actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+              connectionActorUserId(actor),
             quarantinedAt: null,
             quarantineReason: null,
             updatedAt: reviewedAt,
@@ -3550,6 +3548,7 @@ export function toolAccessService(
     input: { credentialValues: Record<string, string> },
     actor?: ActorInfo,
   ): Promise<ToolConnectionHealthCheckResult> {
+    await actor?.managementContext?.reauthorize();
     const connection = await getConnectionRow(connectionId, companyId);
     assertSupportedConnection(connection);
     await assertConnectorConnectionSetupEnabled(connection);
@@ -3781,6 +3780,7 @@ export function toolAccessService(
       input: CreateToolStdioCommandTemplate,
       actor?: ActorInfo,
     ): Promise<ToolStdioCommandTemplate> => {
+      await actor?.managementContext?.reauthorize();
       if (builtInStdioTemplate(input.templateId)) {
         throw conflict(
           "A built-in stdio template already uses this templateId",
@@ -3807,7 +3807,7 @@ export function toolAccessService(
           createdByAgentId:
             actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
           createdByUserId:
-            actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+            connectionActorUserId(actor),
         })
         .returning();
       return toStdioCommandTemplate(row);
@@ -3857,7 +3857,9 @@ export function toolAccessService(
       scopes?: string[];
       returnTo?: string;
       redirectUri: string;
+      managementContext?: ConnectionManagementContext;
     }) => {
+      await input.managementContext?.reauthorize();
       const runContext = await loadBrokerRunContext(input);
       const connection = await getConnectionRow(
         input.connectionId,
@@ -3879,7 +3881,7 @@ export function toolAccessService(
       }
       return startOAuth(input.companyId, connection.id, {
         redirectUri: input.redirectUri,
-        actor: { actorType: "agent", actorId: input.agentId },
+        actor: { actorType: "agent", actorId: input.agentId, ...input.managementContext?.audit, managementContext: input.managementContext },
         subjectUserId: input.subjectUserId,
         scopes: input.scopes,
         returnTo: input.returnTo,
@@ -3943,7 +3945,7 @@ export function toolAccessService(
             reviewedByAgentId:
               actor?.actorType === "agent" ? (actor.actorId ?? null) : null,
             reviewedByUserId:
-              actor?.actorType === "user" ? (actor.actorId ?? null) : null,
+              connectionActorUserId(actor),
             quarantinedAt: null,
             quarantineReason: null,
             updatedAt: reviewedAt,
@@ -4466,6 +4468,7 @@ export function toolAccessService(
       input: CreateToolConnection,
       actor?: ActorInfo,
     ): Promise<ToolConnection> => {
+      await actor?.managementContext?.reauthorize();
       let applicationId = input.applicationId;
       let applicationNamespace = input.applicationName ?? input.name;
       const transport = input.transport;
@@ -4512,6 +4515,7 @@ export function toolAccessService(
           .returning();
         applicationId = app.id;
       }
+      await actor?.managementContext?.reauthorize();
       const connectionId = randomUUID();
       const binding = actorBinding(actor);
       const [row] = await db
@@ -4542,8 +4546,7 @@ export function toolAccessService(
           credentialSecretRefs: input.credentialSecretRefs ?? [],
           createdByAgentId:
             binding.actorType === "agent" ? binding.actorId : null,
-          createdByUserId:
-            binding.actorType === "user" ? binding.actorId : null,
+          createdByUserId: connectionActorUserId(actor),
         })
         .returning();
       await ensureDefaultOrganizationGrant(row);
@@ -4647,13 +4650,14 @@ export function toolAccessService(
     refreshCatalog,
 
     configureRailwaySsh: async (connectionId: string, companyId: string, input: ConfigureRailwaySsh, actor: ActorInfo): Promise<RailwaySshSetup | null> => {
+      await actor.managementContext?.reauthorize();
       const knownHosts = input.action === "enable" ? validateRailwayKnownHosts(input.knownHosts) : "";
       const setup = await db.transaction(async (tx) => {
         const [grant] = await tx.select().from(connectionGrants).where(and(eq(connectionGrants.id, input.grantId), eq(connectionGrants.connectionId, connectionId), eq(connectionGrants.companyId, companyId))).for("update");
         const [connection] = await tx.select().from(toolConnections).where(and(eq(toolConnections.id, connectionId), eq(toolConnections.companyId, companyId))).for("update");
         if (!connection || !isRailwayConnection(connection) || (connection.status !== "active" && input.action !== "remove")) throw unprocessable("Connect Railway before configuring container access.");
         if (!grant || (grant.status !== "active" && input.action !== "remove")) throw unprocessable("Select an active Railway authorization.");
-        if (grant.kind === "user" && (actor.actorType !== "user" || actor.actorId !== grant.subjectUserId)) throw forbidden("Only this authorization's owner can configure its SSH key.");
+        if (grant.kind === "user" && connectionActorUserId(actor) !== grant.subjectUserId) throw forbidden("Only this authorization's owner can configure its SSH key.");
         const existing = asRecord(connection.config.railwaySsh);
         if (existing.grantId && existing.grantId !== grant.id) throw conflict("Remove the existing container key before choosing another authorization.");
         const currentRef = grant.credentialSecretRefs.find((ref) => ref.configPath === RAILWAY_SSH_SECRET_PATH);

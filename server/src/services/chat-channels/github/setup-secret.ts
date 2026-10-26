@@ -1,3 +1,4 @@
+import type { ConnectionManagementContext } from "../../connection-management.js";
 import type { EndpointRow, InternalSetupState } from "../runtime-types.js";
 
 import { chatCredentialMutationLease, type CredentialMutationLeaseGuard } from "../../chat-credential-mutation-lease.js";
@@ -57,7 +58,9 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
   async function generateSetupSecret(
     endpointId: string,
     actorUserId?: string | null,
+    managementContext?: ConnectionManagementContext,
   ) {
+    await managementContext?.reauthorize();
     const initial = await endpointRecord(endpointId);
     if (!initial) throw notFound("Chat endpoint not found");
     if (initial.endpoint.provider !== "github") {
@@ -123,23 +126,25 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
         // state moves fail-closed before ref replacement. Once refs change, only
         // best-effort work remains and the plaintext must still be returned.
         await db.transaction(async (tx) => {
+          await managementContext?.reauthorize();
           await credentialLease.assertOwned(tx);
           await writeSetupSecretActivity(tx as unknown as Db, {
             companyId: endpoint.companyId,
-            actorType: "user",
-            actorId: actorUserId ?? "board",
+            ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
             action: "chat_endpoint.setup_secret_rotation_started",
             entityType: "tool_connection",
             entityId: endpoint.connectionId,
             details: auditDetails,
           });
+          await managementContext?.reauthorize();
           await credentialLease.assertOwned(tx);
         });
         try {
           if (rotatingConfiguredApp) {
             const updatedAt = new Date();
             await db.transaction(async (tx) => {
-              await credentialLease.assertOwned(tx);
+              await managementContext?.reauthorize();
+          await credentialLease.assertOwned(tx);
               const current = await tx
                 .select({ setup: chatEndpoints.setup })
                 .from(chatEndpoints)
@@ -176,7 +181,8 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
                   updatedAt,
                 })
                 .where(eq(toolConnections.id, endpoint.connectionId));
-              await credentialLease.assertOwned(tx);
+              await managementContext?.reauthorize();
+          await credentialLease.assertOwned(tx);
             });
             await invalidateRuntime(endpoint.id).catch(() => undefined);
           } else {
@@ -186,7 +192,8 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
             // endpoints affected by the earlier pre-connect rotation trap.
             const updatedAt = new Date();
             await db.transaction(async (tx) => {
-              await credentialLease.assertOwned(tx);
+              await managementContext?.reauthorize();
+          await credentialLease.assertOwned(tx);
               const current = await tx
                 .select({ setup: chatEndpoints.setup })
                 .from(chatEndpoints)
@@ -220,7 +227,8 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
                   updatedAt,
                 })
                 .where(eq(toolConnections.id, endpoint.connectionId));
-              await credentialLease.assertOwned(tx);
+              await managementContext?.reauthorize();
+          await credentialLease.assertOwned(tx);
             });
           }
           await options.setupSecretCredentialPersistBarrier?.();
@@ -245,8 +253,7 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
         } catch (error) {
           await writeSetupSecretActivity(db, {
             companyId: endpoint.companyId,
-            actorType: "user",
-            actorId: actorUserId ?? "board",
+            ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
             action: "chat_endpoint.setup_secret_rotation_failed",
             entityType: "tool_connection",
             entityId: endpoint.connectionId,
@@ -265,17 +272,18 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
         }
         await db
           .transaction(async (tx) => {
-            await credentialLease.assertOwned(tx);
+            await managementContext?.reauthorize();
+          await credentialLease.assertOwned(tx);
             await writeSetupSecretActivity(tx as unknown as Db, {
               companyId: endpoint.companyId,
-              actorType: "user",
-              actorId: actorUserId ?? "board",
+              ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
               action: "chat_endpoint.setup_secret_generated",
               entityType: "tool_connection",
               entityId: endpoint.connectionId,
               details: auditDetails,
             });
-            await credentialLease.assertOwned(tx);
+            await managementContext?.reauthorize();
+          await credentialLease.assertOwned(tx);
           })
           .catch((error) => {
             logger.warn(

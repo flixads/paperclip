@@ -1170,6 +1170,7 @@ const connectionIntentBrandAssetSchema = z
 
 export const connectionIntentPayloadSchema = z
   .object({
+    savedSetup: z.object({ endpointId: z.string().guid(), connectionId: z.string().guid() }).strict().optional(),
     accessRequest: z.object({
       connectionId: z.string().guid(),
       connectionName: z.string().trim().min(1).max(160),

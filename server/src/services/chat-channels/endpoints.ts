@@ -1,3 +1,4 @@
+import type { ConnectionManagementContext } from "../connection-management.js";
 import { slackSetupState } from "./slack/setup.js";
 import { assertChatExecutionDefaultsAccess } from "../chat-execution-defaults.js";
 
@@ -240,7 +241,9 @@ function providerSetupState(
     companyId: string,
     input: CreateChatEndpointInput,
     actorUserId?: string | null,
+    managementContext?: ConnectionManagementContext,
   ) {
+    await managementContext?.reauthorize();
     if ((input.provider as string) === "agentmail") throw badRequest("Use the email inbox setup API for AgentMail");
     if ((input.slackApp || input.slackSetupMethod) && input.provider !== "slack") throw unprocessable("Slack app details only apply to Slack connections");
     if (input.slackSetupMethod === "managed" && options.slackRegistration.managerGrants.defaultMethod() !== "managed") throw conflict("Managed Slack setup is unavailable");
@@ -273,7 +276,8 @@ function providerSetupState(
     const name = (
       input.name?.trim() || `${PROVIDER_LABELS[input.provider]} — ${agent.name}`
     ).slice(0, 145);
-    await db.transaction(async (tx) => {
+    await managementContext?.reauthorize();
+      await db.transaction(async (tx) => {
       if (input.applicationId) {
         const application = await tx
           .select({
@@ -362,8 +366,7 @@ function providerSetupState(
     });
     await logActivity(db, {
       companyId,
-      actorType: "user",
-      actorId: actorUserId ?? "board",
+      ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
       action: "chat_endpoint.created",
       entityType: "tool_connection",
       entityId: connectionId,
@@ -380,7 +383,9 @@ function providerSetupState(
     endpointId: string,
     input: UpdateChatEndpointInput,
     actorUserId?: string | null,
+    managementContext?: ConnectionManagementContext,
   ) {
+    await managementContext?.reauthorize();
     const initial = await endpointRecord(endpointId);
     if (!initial) throw notFound("Chat endpoint not found");
     if (initial.endpoint.provider === "agentmail" && Object.keys(input).some((key) => key !== "executionDefaults")) throw badRequest("Use the email inbox API for AgentMail");
@@ -442,13 +447,14 @@ function providerSetupState(
           values.allowGroupChats = input.allowGroupChats;
         if (input.allowUnlinkedPeople !== undefined)
           values.allowUnlinkedPeople = input.allowUnlinkedPeople;
-        await db.transaction(async (tx) => {
+        await managementContext?.reauthorize();
+      await db.transaction(async (tx) => {
           await credentialLease.assertOwned(tx);
           if (input.executionDefaults !== undefined) {
             await assertChatExecutionDefaultsAccess(db, {
               companyId: existing.endpoint.companyId,
               assigneeAgentId: values.assignedAgentId ?? existing.endpoint.assignedAgentId,
-              actor: { type: "board", userId: actorUserId, source: actorUserId ? "session" : "local_implicit" },
+              actor: managementContext?.actor ?? { type: "board", userId: actorUserId, source: actorUserId ? "session" : "local_implicit" },
               defaults: input.executionDefaults,
             }, tx);
             values.executionDefaults = input.executionDefaults;
@@ -459,8 +465,7 @@ function providerSetupState(
             .where(eq(chatEndpoints.id, endpointId));
           await logActivity(tx as unknown as Db, {
             companyId: existing.endpoint.companyId,
-            actorType: "user",
-            actorId: actorUserId ?? "board",
+            ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
             action: "chat_endpoint.updated",
             entityType: "tool_connection",
             entityId: existing.endpoint.connectionId,

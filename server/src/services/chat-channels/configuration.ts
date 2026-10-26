@@ -1,3 +1,4 @@
+import type { ConnectionManagementContext } from "../connection-management.js";
 import { preparePhotonConfiguration, createPhotonConfiguration } from "./imessage-photon/setup.js";
 import { slackRuntimeConfig } from "./slack/setup.js";
 import { createTelegramSetup } from "./telegram/setup.js";
@@ -113,7 +114,9 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
     endpointId: string,
     input: ConfigureChatEndpointInput,
     actorUserId?: string | null,
+    managementContext?: ConnectionManagementContext,
   ) {
+    await managementContext?.reauthorize();
     const record = await endpointRecord(endpointId);
     if (!record) throw notFound("Chat endpoint not found");
     if (record.endpoint.provider === "agentmail") throw badRequest("Use the email inbox API for AgentMail");
@@ -148,6 +151,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
         input,
         credentialLease,
         actorUserId,
+        managementContext,
       ),
     );
   }
@@ -157,7 +161,9 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
     input: ConfigureChatEndpointInput,
     credentialLease: CredentialMutationLeaseGuard,
     actorUserId?: string | null,
+    managementContext?: ConnectionManagementContext,
   ) {
+    await managementContext?.reauthorize();
     const record = await endpointRecord(endpointId);
     if (!record) throw notFound("Chat endpoint not found");
     const endpoint = record.endpoint;
@@ -167,6 +173,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
           code: "chat_endpoint_not_active",
         });
       }
+      await managementContext?.reauthorize();
       await db.transaction(async (tx) => {
         await credentialLease.assertOwned(tx);
         const pausedAt = new Date();
@@ -219,8 +226,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
       await invalidateRuntime(endpoint.id);
       await logActivity(db, {
         companyId: endpoint.companyId,
-        actorType: "user",
-        actorId: actorUserId ?? "board",
+        ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
         action: "chat_endpoint.paused",
         entityType: "tool_connection",
         entityId: endpoint.connectionId,
@@ -280,7 +286,8 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
         );
       let activatedEndpoint!: EndpointRow;
       try {
-        await db.transaction(async (tx) => {
+        await managementContext?.reauthorize();
+      await db.transaction(async (tx) => {
           await credentialLease.assertOwned(tx);
           const resumedAt = new Date();
           const current = await tx
@@ -362,7 +369,8 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
         if (activatedEndpoint) {
           const failure = redactError(error);
           const failedAt = new Date();
-          await db.transaction(async (tx) => {
+          await managementContext?.reauthorize();
+      await db.transaction(async (tx) => {
             await credentialLease.assertOwned(tx);
             await notifyChatEndpointWork(tx, endpoint.connectionId);
             await tx
@@ -415,8 +423,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
       }
       await logActivity(db, {
         companyId: endpoint.companyId,
-        actorType: "user",
-        actorId: actorUserId ?? "board",
+        ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
         action: "chat_endpoint.resumed",
         entityType: "tool_connection",
         entityId: endpoint.connectionId,
@@ -454,6 +461,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
           code: "chat_endpoint_already_removed",
         });
       }
+      await managementContext?.reauthorize();
       await db.transaction(async (tx) => {
         await credentialLease.assertOwned(tx);
         const current = await tx
@@ -696,6 +704,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
     // it never leaves credentials bound to the losing endpoint.
     if (!endpoint.botExternalId) {
       try {
+        await managementContext?.reauthorize();
         const claimed = await db.transaction(async (tx) => {
           await credentialLease.assertOwned(tx);
           await notifyChatEndpointWork(tx, endpoint.connectionId);
@@ -762,6 +771,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
       endpoint.provider === "slack" &&
       (input.action === "configure" || input.action === "reconnect");
     try {
+      await managementContext?.reauthorize();
       await db.transaction(async (tx) => {
         await credentialLease.assertOwned(tx);
         const current = await tx
@@ -861,6 +871,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
     } catch (error) {
       const failure = redactError(error);
       await invalidateRuntime(endpoint.id).catch(() => undefined);
+      await managementContext?.reauthorize();
       await db.transaction(async (tx) => {
         await credentialLease.assertOwned(tx);
         await notifyChatEndpointWork(tx, endpoint.connectionId);
@@ -888,12 +899,12 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
       throw unprocessable(failure, { code: "chat_provider_setup_failed" });
     }
 
-    await db.transaction(async (tx) => {
+    await managementContext?.reauthorize();
+      await db.transaction(async (tx) => {
       await credentialLease.assertOwned(tx);
       await logActivity(tx as unknown as Db, {
         companyId: endpoint.companyId,
-        actorType: "user",
-        actorId: actorUserId ?? "board",
+        ...(managementContext?.audit ?? { actorType: "user" as const, actorId: actorUserId ?? "board" }),
         action:
           input.action === "reconnect"
             ? "chat_endpoint.reconnected"

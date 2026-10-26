@@ -9712,6 +9712,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           },
         });
         expect(rows[0]!.details).toEqual({
+          permissionDecision: expect.objectContaining({ operation: "PUT /chat-endpoints/:endpointId/resources" }),
           endpointId: endpoint.id,
           provider: "slack",
           changes: [
@@ -10198,7 +10199,7 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
     ];
     for (const mutation of deniedMutations) {
       const response = await mutation.expect(403);
-      expect(response.body.error).toBe(
+      expect(response.body.error).toContain(
         "Missing permission: tools:manage_connections",
       );
     }

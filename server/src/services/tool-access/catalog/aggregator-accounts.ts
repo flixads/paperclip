@@ -1,3 +1,4 @@
+import { connectionActorUserId } from "../actor.js";
 import { actorForSecret } from "../oauth/credential-store.js";
 import type { ActorInfo } from "../types.js";
 import { remoteEndpoint, projectedConnectionHeaders } from "../connection-methods.js";
@@ -88,7 +89,8 @@ export function createAggregatorAccounts(db: Db, { options, secrets, audit, cred
 
   async function openComposioGateway(connectionId: string, actor: ActorInfo) {
     const connection = await getConnectionRow(connectionId);
-    if (actor.actorType !== "user" || !actor.actorId) throw forbidden("A human connection manager must configure this app");
+    await actor.managementContext?.reauthorize();
+    if (!connectionActorUserId(actor)) throw forbidden("An authorized responsible user is required");
     if (connection.config.sourceTemplateKey !== "composio" || connection.transport !== "mcp_remote"
       || connection.status !== "active" || !connection.enabled) throw unprocessable("Connect your Composio gateway first");
     const catalog = await db.select().from(toolCatalogEntries).where(and(
@@ -225,8 +227,9 @@ export function createAggregatorAccounts(db: Db, { options, secrets, audit, cred
     return provider;
   }
 
-  function assertDiscoveryActor(actor: ActorInfo) {
-    if (actor.actorType !== "user" || !actor.actorId) throw forbidden("A human connection manager must check accounts");
+  async function assertDiscoveryActor(actor: ActorInfo) {
+    await actor.managementContext?.reauthorize();
+    if (!connectionActorUserId(actor)) throw forbidden("An authorized responsible user is required");
   }
 
   async function aggregatorDiscoveryState(connection: typeof toolConnections.$inferSelect, actor: ActorInfo, retryUnsupported = false): Promise<AggregatorAppsResponse["discovery"]> {
@@ -262,7 +265,7 @@ export function createAggregatorAccounts(db: Db, { options, secrets, audit, cred
   }
 
   async function aggregatorAppsResponse(connection: typeof toolConnections.$inferSelect, actor: ActorInfo): Promise<AggregatorAppsResponse> {
-    assertDiscoveryActor(actor);
+    await assertDiscoveryActor(actor);
     const provider = aggregatorProvider(connection);
     const result = await composioAppsResponse(connection, actor);
     const discovery = await aggregatorDiscoveryState(connection, actor);
@@ -322,7 +325,7 @@ export function createAggregatorAccounts(db: Db, { options, secrets, audit, cred
   }
 
   async function syncAggregatorApps(connectionId: string, force: boolean, actor: ActorInfo): Promise<AggregatorAppsResponse> {
-    assertDiscoveryActor(actor);
+    await assertDiscoveryActor(actor);
     let connection = await getConnectionRow(connectionId);
     const provider = aggregatorProvider(connection);
     const discovery = await aggregatorDiscoveryState(connection, actor, force);
@@ -380,7 +383,8 @@ export function createAggregatorAccounts(db: Db, { options, secrets, audit, cred
   }
 
   async function configureArcadeDiscovery(connectionId: string, input: ArcadeDiscoverySetupInput, actor: ActorInfo) {
-    assertDiscoveryActor(actor);
+    await actor?.managementContext?.reauthorize();
+    await assertDiscoveryActor(actor);
     const companyId = (await getConnectionRow(connectionId)).companyId;
     await db.transaction(async tx => {
       const [connection] = await tx.select().from(toolConnections).where(eq(toolConnections.id, connectionId)).for("update");
@@ -422,6 +426,7 @@ export function createAggregatorAccounts(db: Db, { options, secrets, audit, cred
     },
     listAggregatorApps: async (connectionId: string, actor: ActorInfo) => aggregatorAppsResponse(await getConnectionRow(connectionId), actor),
     refreshAggregatorApps: async (connectionId: string, requested: string[], actor: ActorInfo) => {
+    await actor?.managementContext?.reauthorize();
       const connection = await getConnectionRow(connectionId);
       if (aggregatorProvider(connection) === "composio" && requested.length) {
         const { manage } = await openComposioGateway(connectionId, actor);
@@ -434,11 +439,13 @@ export function createAggregatorAccounts(db: Db, { options, secrets, audit, cred
     syncComposioApps: startComposioAppSync,
     async listComposioApps(connectionId: string, actor: ActorInfo) {
       const connection = await getConnectionRow(connectionId);
-      if (actor.actorType !== "user" || !actor.actorId) throw forbidden("Board access required");
+      await actor.managementContext?.reauthorize();
+      if (!connectionActorUserId(actor)) throw forbidden("An authorized responsible user is required");
       if (connection.config.sourceTemplateKey !== "composio") throw notFound("Composio gateway not found");
       return composioAppsResponse(connection, actor);
     },
     async refreshComposioApps(connectionId: string, requested: string[], actor: ActorInfo) {
+      await actor.managementContext?.reauthorize();
       if (requested.some(toolkit => !findComposioCatalogApp(toolkit))) throw notFound("This Composio app is not in the catalog");
       const { connection, manage } = await openComposioGateway(connectionId, actor);
       const existing = await cachedComposioApps(connection, actor);

@@ -4,6 +4,7 @@ import { promptInjectionPreventionService } from "./prompt-injection-prevention.
 import { adapterExecutionControls } from "./adapter-execution-control.js";
 import type { BudgetServiceHooks } from "./budgets.js";
 import type { PromptInjectionDetectorMetadata } from "@paperclipai/shared";
+import { connectionManagementService, type ConnectionManagementContext } from "./connection-management.js";
 import { notifyDeliveryWork, DELIVERY_QUEUES } from "./delivery-work-notifications.js";
 import { measureToolDiscovery, measureRunPhase } from "./execution-preparation-timing.js";
 import { nativeProviderCatalogFor } from "./native-provider-catalogs.js";
@@ -404,6 +405,7 @@ interface ExecuteGatewayToolInput {
 
 interface ExecuteTestCallInput {
   signal?: AbortSignal;
+  managementContext?: ConnectionManagementContext;
   companyId: string;
   connectionId: string;
   agentId: string;
@@ -6792,6 +6794,7 @@ export function createToolGatewayService(
       revokedAt: row.revokedAt,
       createdByAgentId: row.createdByAgentId,
       createdByUserId: row.createdByUserId,
+      responsibleUserId: row.responsibleUserId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
     };
@@ -7337,6 +7340,29 @@ export function createToolGatewayService(
         });
       }
     }
+    if (row.token.subjectType === "gateway_client" && (row.token.createdByAgentId || row.token.responsibleUserId)) {
+      // Durable clients inherit current issuer/user authority, not the setup run's lifetime.
+      // The issuer FK is cleared on agent deletion. Retain the responsible-user
+      // marker so deletion cannot turn delegated credentials into system clients.
+      if (!row.token.createdByAgentId || !row.token.responsibleUserId) return recordNamedGatewayAuthFailure({
+        gatewayId: input.gatewayId, gatewayPublicId: input.gatewayPublicId, bearerToken,
+        reasonCode: "gateway_token_run_context_invalid", clientMetadata,
+      });
+      const delegatedActor = { type: "agent" as const, companyId: row.gateway.companyId,
+        agentId: row.token.createdByAgentId, onBehalfOfUserId: row.token.responsibleUserId };
+      const resource = { type: "connection_management" as const, companyId: row.gateway.companyId,
+        gatewayId: row.gateway.id, profileId: row.gateway.profileId, purpose: "tool" as const, operation: "gateway_token.use", targetAgentId: row.gateway.agentId,
+        projectId: row.gateway.projectId, issueId: row.gateway.issueId };
+      try {
+        await connectionManagementService(db).authorize(delegatedActor, "connections:gateway", resource, { mutation: false });
+        await connectionManagementService(db).authorize(delegatedActor, "connections:test", resource, { mutation: false });
+      } catch {
+        return recordNamedGatewayAuthFailure({ gatewayId: input.gatewayId, gatewayPublicId: input.gatewayPublicId,
+          bearerToken, reasonCode: "gateway_token_run_context_invalid", clientMetadata });
+      }
+      agentId ??= row.token.createdByAgentId;
+      responsibleUserId = row.token.responsibleUserId;
+    }
     const now = new Date();
     await db
       .update(toolMcpGatewayTokens)
@@ -7358,8 +7384,8 @@ export function createToolGatewayService(
       gatewayTokenAllowedActions: normalizeGatewayTokenActions(
         row.token.allowedActions,
       ),
-      actorType: runId ? "agent" : "system",
-      actorId: runId ? agentId : row.token.id,
+      actorType: runId || responsibleUserId ? "agent" : "system",
+      actorId: runId ? agentId : responsibleUserId ? row.token.createdByAgentId : row.token.id,
       responsibleUserId,
       createdAt: row.token.createdAt,
       expiresAt:
@@ -7386,7 +7412,7 @@ export function createToolGatewayService(
     invocation: typeof toolInvocations.$inferSelect,
   ): boolean {
     return (
-      invocation.actorType === "user" &&
+      (invocation.actorType === "user" || Boolean(invocation.policyExplanation?.delegatedConnectionTest)) &&
       invocation.runId === null &&
       invocation.issueId === null &&
       invocation.gatewayId === null &&
@@ -7436,8 +7462,8 @@ export function createToolGatewayService(
       agentId: args.agentId,
       runId: null,
       issueId: null,
-      actorType: "user",
-      actorId: args.userId,
+      actorType: args.session.actorType,
+      actorId: args.session.actorId ?? args.userId,
       action: "tool_gateway.call_allowed",
       details: {
         source: "test",
@@ -7531,8 +7557,8 @@ export function createToolGatewayService(
         agentId: args.agentId,
         runId: null,
         issueId: null,
-        actorType: "user",
-        actorId: args.userId,
+        actorType: args.session.actorType,
+        actorId: args.session.actorId ?? args.userId,
         action: "tool_gateway.call_completed",
         details: {
           source: "test",
@@ -7610,8 +7636,8 @@ export function createToolGatewayService(
         agentId: args.agentId,
         runId: null,
         issueId: null,
-        actorType: "user",
-        actorId: args.userId,
+        actorType: args.session.actorType,
+        actorId: args.session.actorId ?? args.userId,
         action:
           status === 504
             ? "tool_gateway.call_deferred"
@@ -7658,7 +7684,11 @@ export function createToolGatewayService(
   ): Promise<void> {
     const agentId = invocation.agentId;
     if (!invocation.connectionId || !agentId) return;
-    const userId = invocation.actorId ?? "board";
+    const delegated = invocation.policyExplanation?.delegatedConnectionTest as {
+      agentId: string; responsibleUserId: string; runId: string | null; keyId: string | null;
+      resource: ConnectionManagementContext["resource"];
+    } | undefined;
+    const userId = delegated?.responsibleUserId ?? invocation.actorId ?? "board";
     const session: ToolGatewaySession = {
       id: "test-call",
       token: "test-call",
@@ -7667,8 +7697,8 @@ export function createToolGatewayService(
       runId: null,
       issueId: null,
       projectId: null,
-      actorType: "user",
-      actorId: userId,
+      actorType: delegated ? "agent" : "user",
+      actorId: delegated?.agentId ?? userId,
       responsibleUserId: userId,
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS),
@@ -7715,6 +7745,16 @@ export function createToolGatewayService(
       promptInjectionMode: "ignore",
     })).summary;
     try {
+      if (delegated) {
+        await connectionManagementService(db).authorize({ type: "agent", companyId: invocation.companyId,
+          agentId: delegated.agentId, onBehalfOfUserId: delegated.responsibleUserId,
+          runId: delegated.runId, keyId: delegated.keyId,
+        }, "connections:test", delegated.resource, { targetAgentIds: [agentId] });
+        const current = await policyService.decide(policyInputForAgentTool({
+          companyId: invocation.companyId, agentId, actorType: "agent", actorId: delegated.agentId, tool, parameters,
+        }));
+        if (!current.allowed && current.decision !== "require_approval") throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
+      }
       await runTestToolInvocation({
         session,
         tool,
@@ -8772,7 +8812,9 @@ export function createToolGatewayService(
       companyId: string;
       body: CreateToolMcpGateway;
       actor?: { agentId?: string | null; userId?: string | null };
+      managementContext?: ConnectionManagementContext;
     }): Promise<ToolMcpGatewayWithTokens> {
+      await input.managementContext?.reauthorize();
       await assertGatewayContext({
         companyId: input.companyId,
         profileId: input.body.profileId,
@@ -8872,6 +8914,9 @@ export function createToolGatewayService(
           profileId: gateway.profileId,
         },
       });
+      if (input.managementContext) await logActivity(db, { companyId: input.companyId, ...input.managementContext.audit,
+        action: "tool_gateway.created", entityType: "tool_mcp_gateway", entityId: gateway.id,
+        details: { profileId: gateway.profileId } });
       return getGatewayWithTokens(input.companyId, gateway.id);
     },
 
@@ -8879,7 +8924,9 @@ export function createToolGatewayService(
       companyId: string;
       gatewayId: string;
       body: UpdateToolMcpGateway;
+      managementContext?: ConnectionManagementContext;
     }): Promise<ToolMcpGatewayWithTokens> {
+      await input.managementContext?.reauthorize();
       const [existing] = await db
         .select()
         .from(toolMcpGateways)
@@ -8991,6 +9038,9 @@ export function createToolGatewayService(
           })
           .onConflictDoNothing();
       }
+      if (input.managementContext) await logActivity(db, { companyId: input.companyId, ...input.managementContext.audit,
+        action: "tool_gateway.updated", entityType: "tool_mcp_gateway", entityId: updated.id,
+        details: { profileId: updated.profileId, status: updated.status } });
       return getGatewayWithTokens(input.companyId, updated.id);
     },
 
@@ -8999,7 +9049,9 @@ export function createToolGatewayService(
       gatewayId: string;
       body: CreateToolMcpGatewayToken;
       actor?: { agentId?: string | null; userId?: string | null };
+      managementContext?: ConnectionManagementContext;
     }): Promise<ToolMcpGatewayTokenCreated> {
+      await input.managementContext?.reauthorize();
       const [gateway] = await db
         .select()
         .from(toolMcpGateways)
@@ -9016,6 +9068,13 @@ export function createToolGatewayService(
           "MCP gateway not found",
           "gateway_not_found",
         );
+      if (input.actor?.agentId && !input.managementContext && input.body.subjectType !== "heartbeat_run") {
+        throw new ToolGatewayHttpError(403, "Agent client tokens require delegated authority", "gateway_token_run_context_invalid");
+      }
+      if (input.managementContext?.actor.type === "agent" && input.body.subjectType === "heartbeat_run" &&
+          (!input.managementContext.actor.runId || input.body.subjectId !== input.managementContext.actor.runId)) {
+        throw new ToolGatewayHttpError(403, "Heartbeat tokens must bind the authenticated run", "gateway_token_run_context_invalid");
+      }
       const tokenId = randomUUID();
       const token = generateNamedGatewayToken(tokenId);
       const tokenPrefix = `pcgw_${tokenId.slice(0, 8)}`;
@@ -9052,12 +9111,16 @@ export function createToolGatewayService(
               ? input.actor.userId
               : null,
           expiryOverrideAt: input.body.expiryOverrideReason ? now : null,
+          responsibleUserId: input.managementContext?.actor.type === "agent" ? input.managementContext.responsibleUserId : null,
           createdByAgentId: input.actor?.agentId ?? null,
           createdByUserId: input.actor?.userId ?? null,
           createdAt: now,
           updatedAt: now,
         })
         .returning();
+      if (input.managementContext) await logActivity(db, { companyId: input.companyId, ...input.managementContext.audit,
+        action: "tool_gateway.token_created", entityType: "tool_mcp_gateway", entityId: input.gatewayId,
+        details: { tokenId: row.id, subjectType: row.subjectType, allowedActions: row.allowedActions } });
       return { ...toGatewayToken(row), token };
     },
 
@@ -9065,7 +9128,9 @@ export function createToolGatewayService(
       companyId: string;
       tokenId: string;
       revokedAt?: Date;
+      managementContext?: ConnectionManagementContext;
     }): Promise<ToolMcpGatewayToken> {
+      await input.managementContext?.reauthorize();
       const now = input.revokedAt ?? new Date();
       const [row] = await db
         .update(toolMcpGatewayTokens)
@@ -9083,6 +9148,9 @@ export function createToolGatewayService(
           "MCP gateway token not found",
           "gateway_token_not_found",
         );
+      if (input.managementContext) await logActivity(db, { companyId: input.companyId, ...input.managementContext.audit,
+        action: "tool_gateway.token_revoked", entityType: "tool_mcp_gateway", entityId: row.gatewayId,
+        details: { tokenId: row.id } });
       return toGatewayToken(row);
     },
 
@@ -9421,6 +9489,8 @@ export function createToolGatewayService(
     },
 
     async executeTestCall(input: ExecuteTestCallInput) {
+      await input.managementContext?.reauthorize();
+      const actingAgentId = input.managementContext?.actor.type === "agent" ? input.managementContext.actor.agentId : null;
       await assertAgentInCompany(input.companyId, input.agentId);
       const session: ToolGatewaySession = {
         id: "test-call",
@@ -9430,8 +9500,8 @@ export function createToolGatewayService(
         runId: null,
         issueId: null,
         projectId: null,
-        actorType: "user",
-        actorId: input.userId,
+        actorType: actingAgentId ? "agent" : "user",
+        actorId: actingAgentId ?? input.userId,
         responsibleUserId: input.userId,
         createdAt: new Date(),
         expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS),
@@ -9472,8 +9542,8 @@ export function createToolGatewayService(
       const decisionInput = policyInputForAgentTool({
         companyId: input.companyId,
         agentId: input.agentId,
-        actorType: "user",
-        actorId: input.userId,
+        actorType: actingAgentId ? "agent" : "user",
+        actorId: actingAgentId ?? input.userId,
         tool,
         parameters: requestedParameters,
         idempotencyKey: `test-call:${randomUUID()}`,
@@ -9486,6 +9556,16 @@ export function createToolGatewayService(
       );
       await policyService.writeAudit(decisionInput, accessDecision);
       const invocationId = recorded.invocation.id;
+      if (actingAgentId && input.managementContext) {
+        await db.update(toolInvocations).set({ policyExplanation: {
+          ...recorded.invocation.policyExplanation,
+          delegatedConnectionTest: {
+            agentId: actingAgentId, responsibleUserId: input.managementContext.responsibleUserId,
+            runId: input.managementContext.actor.runId ?? null, keyId: input.managementContext.actor.keyId ?? null,
+            resource: input.managementContext.resource,
+          },
+        } }).where(eq(toolInvocations.id, invocationId));
+      }
 
       if (accessDecision.decision === "require_approval") {
         if (!recorded.actionRequest) {
@@ -9593,8 +9673,8 @@ export function createToolGatewayService(
           agentId: input.agentId,
           runId: null,
           issueId: null,
-          actorType: "user",
-          actorId: input.userId,
+          actorType: actingAgentId ? "agent" : "user",
+          actorId: actingAgentId ?? input.userId,
           action: "tool_gateway.approval_requested",
           details: {
             source: "test",
@@ -9625,8 +9705,8 @@ export function createToolGatewayService(
           agentId: input.agentId,
           runId: null,
           issueId: null,
-          actorType: "user",
-          actorId: input.userId,
+          actorType: actingAgentId ? "agent" : "user",
+          actorId: actingAgentId ?? input.userId,
           action: "tool_gateway.call_denied",
           details: {
             source: "test",
@@ -9650,6 +9730,7 @@ export function createToolGatewayService(
         };
       }
 
+      await input.managementContext?.reauthorize();
       return runTestToolInvocation({
         session,
         tool,
@@ -11626,14 +11707,19 @@ export function createToolGatewayService(
       companyId: string;
       slotId: string;
       actor?: { agentId?: string | null; runId?: string | null };
+      managementContext?: ConnectionManagementContext;
     }) {
+      await input.managementContext?.reauthorize();
       try {
-        return await runtimeSupervisor.stopSlot({
+        const result = await runtimeSupervisor.stopSlot({
           companyId: input.companyId,
           slotId: input.slotId,
           agentId: input.actor?.agentId ?? null,
           runId: input.actor?.runId ?? null,
         });
+        if (input.managementContext) await logActivity(db, { companyId: input.companyId, ...input.managementContext.audit,
+          action: "tool_runtime.stopped", entityType: "tool_runtime_slot", entityId: input.slotId });
+        return result;
       } catch (err) {
         if (err instanceof ToolRuntimeSupervisorError) {
           throw new ToolGatewayHttpError(
@@ -11651,14 +11737,19 @@ export function createToolGatewayService(
       companyId: string;
       slotId: string;
       actor?: { agentId?: string | null; runId?: string | null };
+      managementContext?: ConnectionManagementContext;
     }) {
+      await input.managementContext?.reauthorize();
       try {
-        return await runtimeSupervisor.restartSlot({
+        const result = await runtimeSupervisor.restartSlot({
           companyId: input.companyId,
           slotId: input.slotId,
           agentId: input.actor?.agentId ?? null,
           runId: input.actor?.runId ?? null,
         });
+        if (input.managementContext) await logActivity(db, { companyId: input.companyId, ...input.managementContext.audit,
+          action: "tool_runtime.restarted", entityType: "tool_runtime_slot", entityId: input.slotId });
+        return result;
       } catch (err) {
         if (err instanceof ToolRuntimeSupervisorError) {
           throw new ToolGatewayHttpError(
