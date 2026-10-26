@@ -1238,19 +1238,6 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
     return { profiles: activeProfiles, entries };
   }
 
-  function profileAllowsTool(profileState: Awaited<ReturnType<typeof effectiveProfiles>>, ctx: ToolAccessContext) {
-    return profileState.profiles.some(profile => {
-      const entries = profileState.entries.filter(entry => entry.profileId === profile.id && profileEntryMatches(entry, ctx));
-      return !entries.some(entry => entry.effect === "exclude")
-        && (profile.defaultAction === "allow" || entries.some(entry => entry.effect === "include"));
-    });
-  }
-
-  async function hasProfileAccess(input: ToolAccessDecisionInput) {
-    const loaded = await loadContext(input);
-    return loaded.ok && profileAllowsTool(await effectiveProfiles(loaded.ctx), loaded.ctx);
-  }
-
   async function explicitGrant(ctx: ToolAccessContext, cache?: ToolAccessDecisionCache): Promise<boolean> {
     const principalType = ctx.actorType === "agent" ? "agent" : ctx.actorType === "user" ? "user" : null;
     const principalId = ctx.actorType === "agent" ? ctx.agentId : ctx.actorId;
@@ -1454,7 +1441,11 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       ? await admittedRateLimitAdmissions(ctx, options.admittedInvocationId) : [];
     const profileState = await effectiveProfiles(ctx, cache);
     const effectiveProfileIds = profileState.profiles.map((profile) => profile.id);
-    const permittedByProfile = profileAllowsTool(profileState, ctx);
+    const permittedByProfile = profileState.profiles.some((profile) => {
+      const matchingEntries = profileState.entries.filter((entry) => entry.profileId === profile.id && profileEntryMatches(entry, ctx));
+      return !matchingEntries.some((entry) => entry.effect === "exclude")
+        && (profile.defaultAction === "allow" || matchingEntries.some((entry) => entry.effect === "include"));
+    });
     const policies = await cachedRead(cache, `enabled-policies:${ctx.companyId}`, async () =>
       db.select().from(toolPolicies).where(and(eq(toolPolicies.companyId, ctx.companyId), eq(toolPolicies.enabled, true))).orderBy(asc(toolPolicies.priority), asc(toolPolicies.createdAt)));
     for (const policy of policies) {
@@ -2182,7 +2173,6 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
 
   return {
     decide,
-    hasProfileAccess,
     writeAudit,
     recordInvocation,
     summarizeAndRedact,

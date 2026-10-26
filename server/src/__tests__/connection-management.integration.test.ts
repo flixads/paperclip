@@ -231,7 +231,7 @@ describe("connection management with production default agents", () => {
     expect(bindings.map(binding => binding.targetId)).toEqual([f.agentId]);
   });
 
-  it.each(["none", "other-agent", "other-agent-no-access", "other-agent-caller-ask", "other-agent-caller-rate", "other-agent-shared-rate", "other-agent-credential", "other-agent-caller-revoked", "private-status", "agent", "user", "cancelled", "project-block", "rate-limit", "agent-rate-approval", "authorized-policy-edit"] as const)("keeps delegated test policy and approval continuation bounded (%s)", async revocation => {
+  it.each(["none", "other-agent", "other-agent-no-access", "other-agent-allow-policy", "other-agent-explicit-grant", "other-agent-caller-ask", "other-agent-caller-rate", "other-agent-shared-rate", "other-agent-credential", "other-agent-credential-none", "other-agent-caller-revoked", "private-status", "agent", "user", "cancelled", "project-block", "rate-limit", "agent-rate-approval", "authorized-policy-edit"] as const)("keeps delegated test policy and approval continuation bounded (%s)", async revocation => {
     const f = await fixture();
     let targetAgentId = f.agentId;
     if (revocation.startsWith("other-agent")) {
@@ -266,16 +266,25 @@ describe("connection management with production default agents", () => {
       await server.db.update(toolConnections).set({ healthStatus: "ok" }).where(eq(toolConnections.id, created.body.id));
       const [entry] = await server.db.insert(toolCatalogEntries).values({ companyId: f.companyId, applicationId: created.body.applicationId, connectionId: created.body.id,
         entryKind: "tool", name: "Fixture probe", toolName: "fixture_probe", inputSchema: { type: "object", properties: {} }, riskLevel: "read", isReadOnly: true, status: "active", versionHash: "fixture-v1" }).returning();
-      expect(await f.request("POST", `/companies/${f.companyId}/tools/apps/${created.body.id}/finish`, { enabledCatalogEntryIds: [entry.id], access: { agentIds: revocation.startsWith("other-agent") && revocation !== "other-agent-no-access" ? [f.agentId, targetAgentId] : [targetAgentId] } })).toMatchObject({ status: 200 });
+      expect(await f.request("POST", `/companies/${f.companyId}/tools/apps/${created.body.id}/finish`, { enabledCatalogEntryIds: [entry.id], access: { agentIds: revocation.startsWith("other-agent") && !["other-agent-no-access", "other-agent-allow-policy", "other-agent-explicit-grant"].includes(revocation) ? [f.agentId, targetAgentId] : [targetAgentId] } })).toMatchObject({ status: 200 });
       const path = `/tool-connections/${created.body.id}/test-calls`;
       const body = { agentId: targetAgentId, runContext: { heartbeatRunId: randomUUID(), issueId: randomUUID(), projectId: randomUUID() }, toolName: "fixture_probe", parameters: {} };
       if (revocation === "other-agent-no-access") {
-        for (const token of [f.key.token, f.jwt]) expect(await f.request("POST", path, body, token)).toMatchObject({ status: 403, body: { reasonCode: "test_caller_connection_unavailable" } });
+        await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "Caller cannot use this tool", policyType: "block", selectors: { connectionId: created.body.id, agentId: f.agentId }, priority: 0 });
+        for (const token of [f.key.token, f.jwt]) expect(await f.request("POST", path, body, token)).toMatchObject({ status: 200, body: { decision: "off", error: { reasonCode: "deny_policy_block" } } });
         expect(calls).toBe(0);
         return;
       }
-      if (revocation === "other-agent-credential") {
-        await server.db.update(toolConnections).set({ authKind: "api_key", credentialPolicy: "per_agent" }).where(eq(toolConnections.id, created.body.id));
+      if (revocation === "other-agent-allow-policy" || revocation === "other-agent-explicit-grant") {
+        if (revocation === "other-agent-allow-policy") await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "Caller authorized by policy", policyType: "allow", selectors: { connectionId: created.body.id, agentId: f.agentId }, priority: 0 });
+        else await server.db.update(principalPermissionGrants).set({ scope: { connectionId: created.body.id } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:use")));
+        const result = await f.request("POST", path, body, f.jwt);
+        expect(result, JSON.stringify(result)).toMatchObject({ status: 200, body: { decision: "allowed", result: { content: "Fixture result" } } });
+        expect(calls).toBe(1);
+        return;
+      }
+      if (revocation === "other-agent-credential" || revocation === "other-agent-credential-none") {
+        await server.db.update(toolConnections).set({ authKind: revocation === "other-agent-credential-none" ? "none" : "api_key", credentialPolicy: "per_agent" }).where(eq(toolConnections.id, created.body.id));
         await server.db.insert(connectionGrants).values([f.agentId, targetAgentId].map(subjectAgentId => ({ companyId: f.companyId, connectionId: created.body.id, kind: "agent" as const, subjectAgentId, status: "active" })));
         expect(await f.request("POST", path, body, f.jwt)).toMatchObject({ status: 403, body: { reasonCode: "test_credential_identity_mismatch" } });
         expect(calls).toBe(0);
