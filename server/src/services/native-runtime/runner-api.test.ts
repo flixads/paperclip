@@ -60,6 +60,7 @@ describe("bounded response capture receipts", () => {
 
 describe("connection setup response protection", () => {
   it.each([
+    ["POST", "/api/chat-endpoints/{endpointId}/setup"],
     ["POST", "/api/chat-endpoints/{endpointId}/setup-secret"],
     ["POST", "/api/chat-endpoints/{endpointId}/github/setup"],
     ["POST", "/api/chat-endpoints/{endpointId}/slack/resume"],
