@@ -1170,7 +1170,8 @@ const connectionIntentBrandAssetSchema = z
 
 export const connectionIntentPayloadSchema = z
   .object({
-    savedSetup: z.object({ endpointId: z.string().guid(), connectionId: z.string().guid() }).strict().optional(),
+    savedSetup: z.object({ endpointId: z.string().guid(), connectionId: z.string().guid(), action: z.enum(["enter_credentials", "rotate_credentials", "confirm_identity"]).optional(), credentialRotation: z.object({ previousId: z.string().guid().nullable() }).strict().optional() }).strict()
+      .refine(value => value.action !== "rotate_credentials" || !!value.credentialRotation, "Rotation requests need a completion boundary").optional(),
     accessRequest: z.object({
       connectionId: z.string().guid(),
       connectionName: z.string().trim().min(1).max(160),

@@ -785,6 +785,8 @@ function scopeAllowsTool(scope: Record<string, unknown> | null, ctx: ToolAccessC
 }
 
 export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecret?: string } = {}) {
+  // Policy administration includes authorized self-targeted changes. It cannot
+  // resolve governed action requests or modify principal permission grants.
   async function listPolicies(companyId: string) {
     return db
       .select()

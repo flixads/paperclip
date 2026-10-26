@@ -1,5 +1,5 @@
 import { connectionManagementService } from "../services/connection-management.js";
-import { connectionIntentService } from "../services/connection-intents.js";
+import { connectionIntentService, savedChatSetupPath } from "../services/connection-intents.js";
 import { companies } from "@paperclipai/db";
 import { eq } from "drizzle-orm";
 import { requiredConnectionUserAction, filterConnectionManagementRows, connectionManagementGuard, connectionRequestContext, connectionRequestUserId } from "./connection-management-authz.js";
@@ -54,6 +54,7 @@ import {
 } from "./authz.js";
 import {
   badRequest,
+  conflict,
   notFound,
   forbidden,
   HttpError,
@@ -104,16 +105,17 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
   const access = accessService(db);
   const github = githubChatManagementService(db, options.fetch);
 
-  async function setupHandoff(req: ExpressRequest, reason: string, kind: ConnectionRequiredUserAction["kind"] = "authenticate") {
+  async function setupHandoff(req: ExpressRequest, reason: string, kind: ConnectionRequiredUserAction["kind"] = "authenticate", options: { requireCredentialRotation?: boolean } = {}) {
     const endpoint = await service.get(endpointId(req));
     const [company] = await db.select({ prefix: companies.issuePrefix }).from(companies).where(eq(companies.id, endpoint.companyId));
+    const action = options.requireCredentialRotation ? "rotate_credentials" as const : kind === "enter_credentials" || kind === "confirm_identity" ? kind : undefined;
     const interactionId = req.actor.type === "agent" && req.actor.runId && endpoint.assignedAgentId === req.actor.agentId
       ? await connectionIntentService(db).requestChatHandoff({ sub: req.actor.agentId!, company_id: endpoint.companyId,
-          run_id: req.actor.runId, responsible_user_id: connectionRequestUserId(req)! }, endpoint.id)
+          run_id: req.actor.runId, responsible_user_id: connectionRequestUserId(req)! }, endpoint.id, { action })
       : null;
     return { status: "needs_user_action", interactionId, endpointId: endpoint.id, connectionId: endpoint.connectionId,
       ...requiredConnectionUserAction(req, { type: "chat_endpoint", id: endpoint.id, companyId: endpoint.companyId },
-        `/${encodeURIComponent(company!.prefix)}/apps/chat/connect?${new URLSearchParams({ provider: endpoint.provider, resume: endpoint.id })}`, reason, kind),
+        savedChatSetupPath(company!.prefix, endpoint, action), reason, kind),
     };
   }
 
@@ -372,7 +374,7 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
   router.post("/chat-endpoints/:endpointId/github/identity/start", managementGuard("connections:configure", "POST /chat-endpoints/:endpointId/github/identity/start"), async (req, res) => {
     if (!(await assertEndpointManagementAccess(req, res))) return;
     res.set("Cache-Control", "no-store");
-    if (req.actor.type === "agent") { res.json(await setupHandoff(req, "The responsible user must authenticate and confirm their own GitHub identity.")); return; }
+    if (req.actor.type === "agent") { res.json(await setupHandoff(req, "The responsible user must authenticate and confirm their own GitHub identity.", "confirm_identity")); return; }
     res.json(await service.githubWizard.startIdentity(endpointId(req), githubUser(req), req.actor));
   });
   router.post("/chat-endpoints/:endpointId/github/identity/confirm", (req, _res, next) => { assertBoard(req); next(); }, validate(z.object({ githubUserId: z.string().regex(/^[1-9][0-9]*$/) }).strict()), async (req, res) => {
@@ -380,7 +382,15 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
     res.set("Cache-Control", "no-store");
     res.json(await service.githubWizard.confirmIdentity(endpointId(req), githubUser(req), req.body.githubUserId));
   });
-  router.post("/chat-endpoints/:endpointId/github/app", managementGuard("connections:configure", "POST /chat-endpoints/:endpointId/github/app"), validate(z.object({ appId: z.string().regex(/^[1-9][0-9]*$/), privateKey: z.string().min(1).max(32000), webhookSecret: z.string().min(16).max(1024), clientId: z.string().min(1).max(128).optional(), clientSecret: z.string().min(1).max(1024).optional() }).strict().refine(value => !!value.clientId === !!value.clientSecret, "Supply both OAuth client credentials")), async (req, res) => {
+  router.post("/chat-endpoints/:endpointId/github/app", managementGuard("connections:configure", "POST /chat-endpoints/:endpointId/github/app"), async (req, res, next) => {
+    if (req.actor.type !== "agent") { next(); return; }
+    if (!(await assertEndpointManagementAccess(req, res))) return;
+    const endpoint = await service.get(endpointId(req));
+    if (endpoint.provider !== "github") throw notFound("GitHub bot not found");
+    if (["archived", "active", "paused"].includes(endpoint.status)) throw conflict("Use the reconnect flow for an existing active bot");
+    res.set("Cache-Control", "no-store");
+    res.json(await setupHandoff(req, "The responsible user must enter the GitHub App credentials and webhook signing secret.", "enter_credentials"));
+  }, validate(z.object({ appId: z.string().regex(/^[1-9][0-9]*$/), privateKey: z.string().min(1).max(32000), webhookSecret: z.string().min(16).max(1024), clientId: z.string().min(1).max(128).optional(), clientSecret: z.string().min(1).max(1024).optional() }).strict().refine(value => !!value.clientId === !!value.clientSecret, "Supply both OAuth client credentials")), async (req, res) => {
     if (!(await assertEndpointManagementAccess(req, res))) return;
     res.json(await service.storeGitHubApp(endpointId(req), githubUser(req), req.body, "existing_app", connectionRequestContext(req)));
   });
@@ -431,7 +441,8 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
     if (!(await assertEndpointManagementAccess(req, res))) return;
     res.set("Cache-Control", "no-store");
     if (req.actor.type === "agent") {
-      res.json(await setupHandoff(req, "The responsible user must rotate and enter the webhook signing secret in GitHub.", "enter_credentials"));
+      if ((await service.get(endpointId(req))).provider !== "github") throw badRequest("Setup secret generation is only available for GitHub");
+      res.json(await setupHandoff(req, "The responsible user must rotate and enter the webhook signing secret in GitHub.", "enter_credentials", { requireCredentialRotation: true }));
       return;
     }
     res

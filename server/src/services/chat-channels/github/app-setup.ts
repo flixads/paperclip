@@ -91,6 +91,7 @@ export function createGitHubAppSetup(db: Db, options: GitHubAppSetupOptions) {
 
   async function storeGitHubApp(endpointId: string, userId: string, credentials: Record<string, string>, source: "manifest" | "existing_app" = "existing_app", managementContext?: ConnectionManagementContext) {
     await managementContext?.reauthorize();
+    if (managementContext?.actor.type === "agent") throw forbidden("GitHub signing credentials require a human setup handoff");
     const initial = await endpointRecord(endpointId);
     if (!initial || initial.endpoint.provider !== "github") throw notFound("GitHub bot not found");
     await withCredentialMutationLease(initial.endpoint, async credentialLease => {
