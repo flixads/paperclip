@@ -1,3 +1,4 @@
+import type { ConnectionManagementContext } from "./connection-management.js";
 import { createHash } from "node:crypto";
 import { boundRunIssueIdSql } from "./run-task-binding.js";
 import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
@@ -792,7 +793,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       .orderBy(asc(toolPolicies.priority), desc(toolPolicies.updatedAt));
   }
 
-  async function reorderPolicies(companyId: string, body: ReorderToolPolicies) {
+  async function reorderPolicies(companyId: string, body: ReorderToolPolicies, managementContext?: ConnectionManagementContext) {
     const uniquePolicyIds = [...new Set(body.policyIds)];
     if (uniquePolicyIds.length !== body.policyIds.length) {
       throw badRequest("policyIds must not contain duplicates");
@@ -820,6 +821,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
         });
       }
 
+      await managementContext?.reauthorize();
       const now = new Date();
       await tx.execute(sql`UPDATE tool_policies
         SET priority = (requested.ordinality * 100)::integer, updated_at = ${now.toISOString()}
@@ -839,6 +841,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
     policyId: string;
     body: DuplicateToolPolicy;
     actor?: { agentId?: string | null; userId?: string | null };
+    managementContext?: ConnectionManagementContext;
   }) {
     const existing = await getGenericPolicyRow(db, input.companyId, input.policyId);
     assertSupportedGenericPolicyShape(existing.policyType, existing.conditions ?? null, existing.config ?? null);
@@ -854,6 +857,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       while (names.has(`${baseName} ${suffix}`)) suffix += 1;
       name = `${baseName} ${suffix}`;
     }
+    await input.managementContext?.reauthorize();
     const now = new Date();
     const [policy] = await db
       .insert(toolPolicies)
@@ -880,8 +884,10 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
     companyId: string,
     body: CreateToolPolicy,
     actor?: { agentId?: string | null; userId?: string | null },
+    managementContext?: ConnectionManagementContext,
   ) {
     assertSupportedGenericPolicyShape(body.policyType, body.conditions ?? null, body.config ?? null);
+    await managementContext?.reauthorize();
     const now = new Date();
     const [policy] = await db
       .insert(toolPolicies)
@@ -908,12 +914,14 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
     companyId: string;
     policyId: string;
     body: UpdateToolPolicy;
+    managementContext?: ConnectionManagementContext;
   }) {
     const existing = await getGenericPolicyRow(db, input.companyId, input.policyId);
     const nextPolicyType = input.body.policyType ?? existing.policyType;
     const nextConditions = input.body.conditions !== undefined ? input.body.conditions ?? null : existing.conditions ?? null;
     const nextConfig = input.body.config !== undefined ? input.body.config ?? null : existing.config ?? null;
     assertSupportedGenericPolicyShape(nextPolicyType, nextConditions, nextConfig);
+    await input.managementContext?.reauthorize();
     const now = new Date();
     const [policy] = await db
       .update(toolPolicies)
@@ -933,8 +941,9 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
     return policy;
   }
 
-  async function deletePolicy(input: { companyId: string; policyId: string }) {
+  async function deletePolicy(input: { companyId: string; policyId: string; managementContext?: ConnectionManagementContext }) {
     const existing = await getGenericPolicyRow(db, input.companyId, input.policyId);
+    await input.managementContext?.reauthorize();
     const [deleted] = await db
       .delete(toolPolicies)
       .where(eq(toolPolicies.id, existing.id))

@@ -25,6 +25,7 @@ export interface ConnectionManagementResource {
   profileId?: string | null;
   gatewayId?: string | null;
   provider?: string | null;
+  requestedProvider?: string | null;
   purpose?: "tool" | "chat" | "ai";
   operation: string;
   readOnly?: boolean;

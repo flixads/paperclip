@@ -8,6 +8,8 @@ import { activityLog, agentApiKeys, companies, chatEndpoints, chatExternalPrinci
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
+import * as remoteEndpointGuard from "../services/remote-http-endpoint-guard.js";
+import * as runIdentity from "../services/run-identity.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { startRunnerApiTestServer } from "./helpers/runner-api-server.js";
 import { getServerAdapter, registerServerAdapter, unregisterServerAdapter } from "../adapters/index.js";
@@ -94,6 +96,23 @@ describe("connection management with production default agents", () => {
     expect(profile, JSON.stringify(profile)).toMatchObject({ status: 201 });
   });
 
+  it("rechecks authority after remote endpoint validation before committing a connection update", async () => {
+    const f = await fixture();
+    const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Before validation", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
+    expect(created).toMatchObject({ status: 201 });
+    const original = remoteEndpointGuard.assertPublicRemoteHttpEndpoint;
+    const validation = vi.spyOn(remoteEndpointGuard, "assertPublicRemoteHttpEndpoint").mockImplementation(async (...args) => {
+      const result = await original(...args);
+      await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_connections")));
+      return result;
+    });
+    try {
+      expect(await f.request("PATCH", `/tool-connections/${created.body.id}`, { name: "After validation" })).toMatchObject({ status: 403 });
+      expect(validation).toHaveBeenCalled();
+      expect((await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.id)))[0].name).toBe("Before validation");
+    } finally { validation.mockRestore(); }
+  });
+
   it("checks finish access, all-agent sharing, and retained targets against both management grants", async () => {
     const f = await fixture();
     const connection = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Finish authority", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
@@ -115,7 +134,7 @@ describe("connection management with production default agents", () => {
     expect(bindings.map(binding => binding.targetId)).toEqual([f.agentId]);
   });
 
-  it.each(["none", "other-agent", "agent", "user", "cancelled", "project-block"] as const)("keeps delegated test policy and approval continuation bounded (%s)", async revocation => {
+  it.each(["none", "other-agent", "agent", "user", "cancelled", "project-block", "rate-limit"] as const)("keeps delegated test policy and approval continuation bounded (%s)", async revocation => {
     const f = await fixture();
     let targetAgentId = f.agentId;
     if (revocation === "other-agent") {
@@ -159,6 +178,14 @@ describe("connection management with production default agents", () => {
         expect(calls).toBe(0);
         await server.db.delete(toolPolicies).where(eq(toolPolicies.id, block.id));
       }
+      if (revocation === "rate-limit") {
+        await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "One test per minute", policyType: "rate_limit", selectors: { connectionId: created.body.id }, config: { limit: 1, windowSeconds: 60, keyBy: ["agent", "tool"] } });
+        expect(await f.request("POST", path, body, f.jwt)).toMatchObject({ status: 200, body: { decision: "allowed", result: { content: "Fixture result" } } });
+        expect(calls).toBe(1);
+        expect(await f.request("POST", path, body, f.jwt)).toMatchObject({ status: 200, body: { decision: "off", error: { reasonCode: "rate_limited" } } });
+        expect(calls).toBe(1);
+        return;
+      }
       await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "Scoped test approval", policyType: "require_approval", selectors: { connectionId: created.body.id, issueId: f.issueId }, priority: 1 });
       const pending = await f.request("POST", path, body, f.jwt);
       expect(pending, JSON.stringify(pending)).toMatchObject({ status: 200, body: { decision: "ask_first" } });
@@ -182,6 +209,71 @@ describe("connection management with production default agents", () => {
       expect(calls).toBe(allowed ? 1 : 0);
       if (allowed) { expect((await approve()).status).toBe(200); expect(calls).toBe(1); }
     } finally { remote.closeAllConnections(); await new Promise<void>((resolve, reject) => remote.close(error => error ? reject(error) : resolve())); }
+  });
+
+  it("bounds and deduplicates resource selectors before per-resource database work", async () => {
+    const f = await fixture();
+    const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Bounded selector", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
+    let resourceReads = 0;
+    const originalSelect = server.db.select.bind(server.db);
+    const select = vi.spyOn(server.db, "select").mockImplementation(((selection: never) => {
+      const builder = originalSelect(selection);
+      const originalFrom = builder.from.bind(builder);
+      builder.from = ((table: never) => {
+        if (table === toolConnections || table === toolPolicies || table === toolCatalogEntries) resourceReads++;
+        return originalFrom(table);
+      }) as typeof builder.from;
+      return builder;
+    }) as typeof server.db.select);
+    try {
+      const path = `/companies/${f.companyId}/tools/policies`;
+      const body = { name: "Bounded policy", policyType: "allow", selectors: { agentId: f.agentId, connectionIds: Array(5000).fill(created.body.id) } };
+      expect(await f.request("POST", path, body)).toMatchObject({ status: 400 });
+      expect(resourceReads).toBe(0);
+      expect(await f.request("POST", path, { ...body, selectors: { ...body.selectors, connectionIds: Array(100).fill(created.body.id) } })).toMatchObject({ status: 201 });
+      expect(resourceReads).toBeLessThan(20);
+      resourceReads = 0;
+      await accessService(server.db).ensureMembership(f.companyId, "user", f.userId, "operator", "suspended");
+      expect(await f.request("POST", path, { ...body, selectors: { ...body.selectors, connectionIds: Array(100).fill(created.body.id) } })).toMatchObject({ status: 403 });
+      expect(resourceReads).toBe(0);
+    } finally { select.mockRestore(); }
+  });
+
+  it("shares one run capture across a management read without caching authority across requests", async () => {
+    const f = await fixture();
+    for (let index = 0; index < 5; index++) expect(await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: `Read snapshot ${index}`, transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } })).toMatchObject({ status: 201 });
+    const capture = vi.spyOn(runIdentity, "captureRunIdentity");
+    try {
+      const listed = await f.request("GET", `/companies/${f.companyId}/tools/connections`, undefined, f.jwt);
+      expect(listed).toMatchObject({ status: 200 });
+      expect(listed.body.connections).toHaveLength(5);
+      expect(capture.mock.calls.length).toBeGreaterThan(0);
+      expect(capture.mock.calls.length).toBeLessThanOrEqual(2);
+      await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_connections")));
+      expect(await f.request("GET", `/companies/${f.companyId}/tools/connections`, undefined, f.jwt)).toMatchObject({ status: 403 });
+    } finally { capture.mockRestore(); }
+  });
+
+  it("returns the same missing-resource response for foreign and absent connection IDs", async () => {
+    const f = await fixture(), other = await fixture();
+    const foreign = await other.request("POST", `/companies/${other.companyId}/tools/connections`, { name: "Other company", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
+    const hidden = await f.request("GET", `/tool-connections/${foreign.body.id}`);
+    const absent = await f.request("GET", `/tool-connections/${randomUUID()}`);
+    expect(hidden).toMatchObject({ status: 404 });
+    expect(absent).toEqual(hidden);
+  });
+
+  it("checks existing and proposed provider scope without treating generic metadata as provider authority", async () => {
+    const f = await fixture();
+    const payload = { name: "Scoped provider", transport: "mcp_remote", authKind: "none", config: { url: "https://1.1.1.1/mcp", provider: "fixture-one" } };
+    const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, payload);
+    expect(created.status).toBe(201);
+    await server.db.update(principalPermissionGrants).set({ scope: { providers: ["fixture-one"] } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_connections")));
+    expect(await f.request("PATCH", `/tool-connections/${created.body.id}`, { name: "Still the same provider" })).toMatchObject({ status: 200 });
+    for (const config of [{ url: "https://1.1.1.1/mcp", provider: "fixture-two" }, { url: "https://1.1.1.1/mcp" }]) expect(await f.request("PATCH", `/tool-connections/${created.body.id}`, { config })).toMatchObject({ status: 403 });
+    expect(await f.request("POST", `/companies/${f.companyId}/tools/connections`, { ...payload, name: "Caller-labelled provider" })).toMatchObject({ status: 403 });
+    await server.db.update(principalPermissionGrants).set({ scope: { purposes: ["tool"] } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_connections")));
+    expect(await f.request("POST", `/companies/${f.companyId}/ai-connections`, { provider: "openai", method: "api_key", name: "Wrong purpose", apiKey: "fixture", ownership: "personal", agentIds: [] })).toMatchObject({ status: 403 });
   });
 
   it("hands generic app authentication to the saved setup without creating agent-bound OAuth state", async () => {

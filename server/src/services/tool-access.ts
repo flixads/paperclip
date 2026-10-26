@@ -4086,6 +4086,7 @@ export function toolAccessService(
     createApplication: async (
       companyId: string,
       input: CreateToolApplication,
+      managementContext?: ConnectionManagementContext,
     ): Promise<ToolApplication> => {
       await assertOptionalPlugin(input.pluginId);
       await assertOptionalAgent(
@@ -4093,6 +4094,7 @@ export function toolAccessService(
         input.ownerAgentId,
         "Tool application owner agent",
       );
+      await managementContext?.reauthorize();
       const [row] = await db
         .insert(toolApplications)
         .values({
@@ -4129,6 +4131,7 @@ export function toolAccessService(
     updateApplication: async (
       applicationId: string,
       input: UpdateToolApplication,
+      managementContext?: ConnectionManagementContext,
     ): Promise<ToolApplication> => {
       const [existing] = await db
         .select()
@@ -4159,6 +4162,7 @@ export function toolAccessService(
           });
         }
       }
+      await managementContext?.reauthorize();
       const [row] = await db
         .update(toolApplications)
         .set({
@@ -4178,6 +4182,7 @@ export function toolAccessService(
 
     deleteApplication: async (
       applicationId: string,
+      managementContext?: ConnectionManagementContext,
     ): Promise<ToolApplication> => {
       const [existing] = await db
         .select()
@@ -4201,6 +4206,7 @@ export function toolAccessService(
       // ON DELETE RESTRICT, so such a delete fails closed with a foreign_key_violation instead
       // of silently cascading the new connection away. Translate that into the same 409 so the
       // endpoint keeps its contract instead of surfacing a 500.
+      await managementContext?.reauthorize();
       let row: typeof toolApplications.$inferSelect | undefined;
       try {
         [row] = await db
@@ -4583,6 +4589,7 @@ export function toolAccessService(
     updateConnection: async (
       connectionId: string,
       input: UpdateToolConnection,
+      managementContext?: ConnectionManagementContext,
     ): Promise<ToolConnection> => {
       const existing = await getConnectionRow(connectionId);
       if (existing.connectionPurpose === "ai" && (input.config || input.transportConfig || input.credentialRefs || input.credentialSecretRefs || (input.credentialPolicy && input.credentialPolicy !== existing.credentialPolicy))) throw badRequest("Use AI account reconnect to change credentials. Provider, sign-in method, and ownership cannot be changed.");
@@ -4609,6 +4616,7 @@ export function toolAccessService(
         ...(input.credentialRefs ?? existing.credentialRefs),
         ...(input.credentialSecretRefs ?? existing.credentialSecretRefs),
       ]);
+      await managementContext?.reauthorize();
       const write = (database: Db) => database
         .update(toolConnections)
         .set({

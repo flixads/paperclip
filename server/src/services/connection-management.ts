@@ -16,6 +16,9 @@ export type ConnectionManagementContext = {
   reauthorize: (continuation?: { afterHumanAction: true }) => Promise<void>;
 };
 
+type CapturedConnectionRun = Omit<Awaited<ReturnType<typeof captureRunIdentity>>, "context"> & { context: Awaited<ReturnType<typeof captureRunIdentity>>["context"] | null };
+const connectionReadRuns = new WeakMap<ConnectionManagementContext, CapturedConnectionRun>();
+
 export function responsibleConnectionUser(actor: AuthorizationActor): string | null {
   return (actor.type === "agent" ? actor.onBehalfOfUserId : actor.userId) ?? null;
 }
@@ -28,10 +31,11 @@ export function connectionManagementService(db: Db) {
     actor: AuthorizationActor,
     action: ConnectionManagementAction,
     resource: ConnectionManagementResource,
-    options: { targetAgentIds?: string[]; mutation?: boolean; afterHumanAction?: boolean; expandedProfile?: boolean; gatewayContextChecked?: boolean } = {},
+    options: { targetAgentIds?: string[]; mutation?: boolean; afterHumanAction?: boolean; expandedProfile?: boolean; gatewayContextChecked?: boolean; readContext?: ConnectionManagementContext; capabilityProbe?: boolean } = {},
   ): Promise<ConnectionManagementContext> {
     const responsibleUserId = responsibleConnectionUser(actor);
     let workContext: ConnectionManagementContext["workContext"] = { runId: null, issueId: null, projectId: null };
+    let capturedRun: CapturedConnectionRun | undefined;
     if (actor.type === "agent") {
       if (!responsibleUserId || !actor.agentId || actor.companyId !== resource.companyId) {
         throw forbidden("Connection management requires a responsible user in this company");
@@ -43,13 +47,16 @@ export function connectionManagementService(db: Db) {
         if (!key || key.revokedAt || key.responsibleUserId !== responsibleUserId || (key.scopeConfig && key.scopeConfig.kind !== "standard")) throw forbidden("Agent key authority is no longer valid");
       }
       if (actor.runId) {
-        const captured = options.afterHumanAction ? await (async () => {
+        const reusable = options.capabilityProbe && !options.afterHumanAction && options.readContext?.actor === actor && options.readContext.resource.companyId === resource.companyId
+          ? connectionReadRuns.get(options.readContext) : undefined;
+        const captured = reusable ?? (options.afterHumanAction ? await (async () => {
           const [run] = await db.select().from(heartbeatRuns).where(and(eq(heartbeatRuns.id, actor.runId!), eq(heartbeatRuns.agentId, actor.agentId!), eq(heartbeatRuns.companyId, resource.companyId)));
           if (!run || !["running", "succeeded"].includes(run.status)) throw forbidden("The originating run cannot continue this authentication");
           const [pending] = await db.select().from(runIdentityContexts).where(and(eq(runIdentityContexts.runId, run.id), eq(runIdentityContexts.status, "pending")));
           if (pending) throw forbidden("Run identity is being reconciled");
           return { run, context: null };
-        })() : await captureRunIdentity(db, { companyId: resource.companyId, agentId: actor.agentId, runId: actor.runId });
+        })() : await captureRunIdentity(db, { companyId: resource.companyId, agentId: actor.agentId, runId: actor.runId }));
+        capturedRun = captured;
         const { run, context } = captured;
         if ((context?.responsibleUserId ?? run.responsibleUserId) !== responsibleUserId) throw forbidden("Run responsible-user authority has changed");
         const snapshot = run.contextSnapshot ?? {};
@@ -103,7 +110,8 @@ export function connectionManagementService(db: Db) {
       resource = { ...resource, selfServiceUserId: connection.createdByUserId,
         purpose: connection.connectionPurpose === "ai" ? "ai" : connection.connectionPurpose === "channel" ? "chat" : "tool",
         provider: typeof connection.config.sourceTemplateKey === "string" ? connection.config.sourceTemplateKey
-          : typeof connection.config.provider === "string" ? connection.config.provider : resource.provider,
+          : typeof connection.config.provider === "string" ? connection.config.provider
+            : typeof (connection.config.ai as Record<string, unknown> | undefined)?.provider === "string" ? String((connection.config.ai as Record<string, unknown>).provider) : resource.provider,
       };
       if (options.mutation ?? action !== "connections:read") {
         const installs = await db.select().from(toolConnectionInstalls).where(eq(toolConnectionInstalls.connectionId, connection.id));
@@ -162,6 +170,11 @@ export function connectionManagementService(db: Db) {
       const resolved = { ...resource, ...(targetAgentId ? { targetAgentId } : {}) };
       decision = await authorization.decide({ actor, action, resource: resolved, scope: { ...resolved } });
       if (!decision.allowed) throw forbidden(decision.explanation, { reason: decision.reason, code: decision.code, operation: resource.operation });
+      if (Object.hasOwn(resource, "requestedProvider") && resource.requestedProvider !== resource.provider) {
+        const proposed = { ...resolved, provider: resource.requestedProvider };
+        const proposedDecision = await authorization.decide({ actor, action, resource: proposed, scope: { ...proposed } });
+        if (!proposedDecision.allowed) throw forbidden(proposedDecision.explanation, { reason: proposedDecision.reason, code: proposedDecision.code, operation: resource.operation });
+      }
       if (actor.type === "agent" && actor.runId && (resolved.projectId || resolved.issueId)) {
         const resourceTrust = await authorization.decide({ actor: { ...actor, runId: undefined }, action, resource: resolved, scope: { ...resolved } });
         if (!resourceTrust.allowed) throw forbidden(resourceTrust.explanation);
@@ -196,14 +209,17 @@ export function connectionManagementService(db: Db) {
       reauthorize: async (continuation) => {
         const current = await authorize(actor, action, resource, { ...options, afterHumanAction: continuation?.afterHumanAction ?? options.afterHumanAction });
         context.workContext = current.workContext;
+        const snapshot = connectionReadRuns.get(current);
+        if (snapshot) connectionReadRuns.set(context, snapshot);
       },
     };
+    if (capturedRun) connectionReadRuns.set(context, capturedRun);
     return context;
   }
 
   async function capability(...args: Parameters<typeof authorize>) {
     try {
-      const context = await authorize(...args);
+      const context = await authorize(args[0], args[1], args[2], { ...args[3], capabilityProbe: true });
       return { allowed: true, reason: context.decision.reason, operation: args[2].operation };
     } catch (error) {
       // Database/provider faults are not authorization denials.

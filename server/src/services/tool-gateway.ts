@@ -7488,7 +7488,7 @@ export function createToolGatewayService(
       await args.managementContext?.reauthorize();
       if (args.managementContext?.actor.type === "agent") {
         Object.assign(args.session, args.managementContext.workContext);
-        const current = await policyService.decide(policyInputForTool({ session: args.session, tool: args.tool, parameters: args.parameters }));
+        const current = await policyService.decide(policyInputForTool({ session: args.session, tool: args.tool, parameters: args.parameters }), { admittedInvocationId: args.invocationId });
         if (!current.allowed && !(args.session.approvedInvocationId && current.decision === "require_approval")) {
           throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
         }
