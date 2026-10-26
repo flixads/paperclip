@@ -1444,7 +1444,7 @@ describe("AppDetail", () => {
         managementUrl: "https://github.com/organizations/paperclipai/settings/installations/101",
       },
     }));
-    await renderAppDetail();
+    const client = await renderAppDetail();
     await act(async () => {
       Array.from(container.querySelectorAll("button"))
         .find((button) => button.textContent?.trim() === "Retry access")
@@ -1455,6 +1455,25 @@ describe("AppDetail", () => {
     expect(checkConnectionHealthMock).toHaveBeenCalledWith("conn-1");
     expect(container.querySelector('a[href="https://github.com/organizations/paperclipai/settings/installations/101"]')?.textContent)
       .toBe("Open installation settings on GitHub");
+
+    // An already-cached connection that also needs attention must not inherit that link.
+    const other = connection({
+      id: "conn-2", authKind: "oauth", healthStatus: "error", requiresReauthorization: false, healthMessage: message,
+    });
+    getConnectionMock.mockResolvedValue(other);
+    client.setQueryData(queryKeys.tools.connection("conn-2"), other);
+    mockParams.connectionId = "conn-2";
+    await act(async () => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <AppDetail />
+        </QueryClientProvider>,
+      );
+    });
+    await flushReact();
+
+    expect(container.textContent).toContain("Retry access");
+    expect(container.querySelector('a[href="https://github.com/organizations/paperclipai/settings/installations/101"]')).toBeNull();
   });
 
   it("shows terminal OAuth failures as reconnect-required sign-in", async () => {
