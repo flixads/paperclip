@@ -57961,7 +57961,8 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
         const before = await db
           .select({ id: chatActions.id })
           .from(chatActions)
-          .where(eq(chatActions.endpointId, context.endpoint.id));
+          .where(eq(chatActions.endpointId, context.endpoint.id))
+          .orderBy(chatActions.id);
         if (linkedPrincipalId) {
           await db
             .update(chatIdentityLinks)
@@ -58043,7 +58044,8 @@ describeEmbeddedPostgres("chat channel control-plane integration", () => {
           db
             .select({ id: chatActions.id })
             .from(chatActions)
-            .where(eq(chatActions.endpointId, context.endpoint.id)),
+            .where(eq(chatActions.endpointId, context.endpoint.id))
+            .orderBy(chatActions.id),
         ).resolves.toEqual(before);
       } finally {
         await db
