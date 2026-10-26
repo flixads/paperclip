@@ -126,3 +126,6 @@ The implementation was rebased onto `a1f77821b9cd5c9c846fdf7a0fa5cc620ad2b6bb`. 
 
 - Final assembled-server acceptance after the device-login fix: **32 scenarios passed** in a fresh PostgreSQL database.
 - Review found that the top-level Apps connect route rejected an `aiLogin`-only handoff before rendering its saved login panel. The new route-policy test failed before the fix; the route now admits a non-empty saved-login ID, leaving owner/session validation to the existing server and panel. Empty IDs remain rejected. The prior component-only tests did not cover this entry gate.
+
+- Saved-login route policy and Apps connect components: **236 tests passed** after the entry fix; the added route-policy case was red before the fix. Token gates and map validation passed.
+- Master advanced during PR qualification. The implementation now merges `5823e9a664`; its already published Copilot v60 identity is preserved byte-for-byte, and the combined connection guidance is declared as v61. Generated TypeScript/Rust identity checks and all **58 Copilot installation tests passed**. These checks do not imply a new live provider qualification.
