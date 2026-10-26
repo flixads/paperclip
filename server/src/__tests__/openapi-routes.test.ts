@@ -797,7 +797,7 @@ describe("openapi routes", () => {
     ).toMatchObject({
       type: "object",
       additionalProperties: false,
-      required: ["webhookSecret"],
+      required: ["webhookSecret", "credentialRotationId"],
     });
     expect(setupSecret.responses["409"]).toBeDefined();
     expect(setupSecret.responses["422"]).toBeDefined();

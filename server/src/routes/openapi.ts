@@ -859,7 +859,7 @@ const chatEndpointSetupResponseSchema = z
   .strict();
 
 const chatEndpointSetupSecretResponseSchema = z
-  .object({ webhookSecret: z.string().length(64) })
+  .object({ webhookSecret: z.string().length(64), credentialRotationId: z.uuid() })
   .strict();
 
 const chatEndpointCredentialHandoffSchema = z.object({

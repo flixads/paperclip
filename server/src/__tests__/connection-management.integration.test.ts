@@ -4,11 +4,12 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { activityLog, agentApiKeys, companies, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
+import { activityLog, agentApiKeys, companies, companySecrets, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
 import * as remoteEndpointGuard from "../services/remote-http-endpoint-guard.js";
+import * as remoteHttpFetch from "../services/remote-http-fetch.js";
 import * as runIdentity from "../services/run-identity.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { startRunnerApiTestServer } from "./helpers/runner-api-server.js";
@@ -714,11 +715,13 @@ describe("connection management with production default agents", () => {
       expect((await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, rotationIntentId)))[0].status).toBe("pending");
       const humanRotation = await humanRequest(`/api/chat-endpoints/${created.body.id}/setup-secret`, "POST", {});
       expect(humanRotation.status).toBe(201);
-      expect(await humanRotation.json()).toEqual({ webhookSecret: expect.stringMatching(/^[a-f0-9]{64}$/) });
+      const generatedRotation = await humanRotation.json();
+      expect(generatedRotation).toMatchObject({ webhookSecret: expect.stringMatching(/^[a-f0-9]{64}$/), credentialRotationId: expect.any(String) });
       const [humanRotated] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
       expect(humanRotated.credentialSecretRefs).not.toEqual(beforeRotation.credentialSecretRefs);
       const rotationState = await f.request("GET", `/chat-endpoints/${endpoint.id}`);
       expect(rotationState.body.setup).toMatchObject({ credentialRotationId: expect.any(String), webhookVerifiedAt: null });
+      expect(rotationState.body.setup.credentialRotationId).toBe(generatedRotation.credentialRotationId);
       const nextRotation = await f.request("POST", `/chat-endpoints/${endpoint.id}/setup-secret`, {});
       expect(nextRotation.body.requiredUserAction.setupPath).toContain(`afterRotationId=${rotationState.body.setup.credentialRotationId}`);
       expect(await findSatisfiedToolConnection(server.db, task, rotationIntent)).toBeNull();
@@ -747,7 +750,52 @@ describe("connection management with production default agents", () => {
       expect((await f.request("GET", `/companies/${f.companyId}/email/connections`)).body).toEqual(expect.arrayContaining([expect.objectContaining({ id: created.body.id })]));
       const [saved] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.id));
       expect(saved.createdByUserId).toBe(f.userId);
+      const other = await f.request("POST", `/companies/${f.companyId}/email/connections`, { ...body, apiKey: "other-agentmail-secret", grantKind: "organization", idempotencyKey: randomUUID() });
+      expect(other).toMatchObject({ status: 201 });
+      await server.db.update(principalPermissionGrants).set({ scope: { connectionIds: [created.body.id] } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_connections")));
+      for (const token of [f.key.token, f.jwt]) {
+        const listed = await f.request("GET", `/companies/${f.companyId}/email/connections?connectionId=${created.body.id}`, undefined, token);
+        expect(listed, JSON.stringify(listed)).toMatchObject({ status: 200 });
+        expect(listed.body.map((account: { id: string }) => account.id)).toEqual([created.body.id]);
+      }
     } finally { provider = null; }
+  });
+
+  it("saves delegated Arcade discovery for the responsible user and shares its inventory with that user", async () => {
+    const f = await fixture();
+    const transport = vi.spyOn(remoteHttpFetch, "guardedRemoteHttpFetch").mockImplementation(async (url, init) => provider!(String(url), init));
+    provider = async (url, init) => {
+      const path = new URL(url).pathname;
+      const rpc = init?.body ? JSON.parse(String(init.body)) : null;
+      if (rpc?.method === "initialize") return Response.json({ jsonrpc: "2.0", id: rpc.id, result: { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "fixture", version: "1" } } });
+      if (rpc?.method === "notifications/initialized") return new Response(null, { status: 202 });
+      if (rpc?.method === "tools/list") return Response.json({ jsonrpc: "2.0", id: rpc.id, result: { tools: [{ name: "Notion.ListPages", inputSchema: { type: "object" } }] } });
+      expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer fixture-arcade-discovery");
+      if (path === "/v1/tools") return Response.json({ items: [{ qualified_name: "Notion.ListPages", toolkit: { name: "Notion" }, requirements: { met: true, authorization: { provider_id: "notion", token_status: "completed" } } }] });
+      if (path === "/v1/admin/user_connections") return Response.json({ items: [{ id: "arcade-work", provider_id: "notion", user_id: "arcade-user", connection_status: "active" }] });
+      throw new Error(`Unexpected Arcade fixture operation: ${path}`);
+    };
+    try {
+      const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Arcade fixture", transport: "mcp_remote", authKind: "none", credentialPolicy: "shared", status: "active", enabled: true, config: { sourceTemplateKey: "arcade", url: "https://api.arcade.dev/mcp/test" } });
+      expect(created, JSON.stringify(created)).toMatchObject({ status: 201 });
+      const configured = await f.request("PUT", `/tool-connections/${created.body.id}/aggregator/discovery`, { apiKey: "fixture-arcade-discovery", userId: "arcade-user" }, f.jwt);
+      expect(configured, JSON.stringify(configured)).toMatchObject({ status: 200 });
+      const [saved] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.id));
+      const discovery = saved.config.aggregatorDiscovery as Record<string, { secretId: string }>;
+      expect(discovery[f.agentId]).toBeUndefined();
+      expect(discovery[f.userId]).toMatchObject({ userId: "arcade-user", secretId: expect.any(String) });
+      const [secret] = await server.db.select().from(companySecrets).where(eq(companySecrets.id, discovery[f.userId].secretId));
+      expect(secret.ownerUserId).toBe(f.userId);
+      const events = await server.db.select().from(activityLog).where(eq(activityLog.entityId, saved.id));
+      expect(events).toEqual(expect.arrayContaining([expect.objectContaining({ action: "tool_connection.account_sync_configured", actorType: "agent", actorId: f.agentId, responsibleUserId: f.userId })]));
+      const cookie = await server.humanSession(f.userId);
+      await vi.waitFor(async () => {
+        const response = await fetch(`${server.apiUrl}/api/tool-connections/${saved.id}/aggregator/apps`, { headers: { cookie } });
+        const result = await response.json();
+        expect(result.discovery).toMatchObject({ availability: "available" });
+        expect(result.apps).toEqual(expect.arrayContaining([expect.objectContaining({ provider: "arcade", appSlug: "notion" })]));
+      }, { timeout: 10_000 });
+    } finally { transport.mockRestore(); provider = null; }
   });
 
   it("keeps durable gateway client tokens bound to the issuer and responsible user", async () => {
