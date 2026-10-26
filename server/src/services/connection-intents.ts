@@ -73,9 +73,13 @@ export function chatCredentialRotationId(setup: object): string | null {
   return typeof value === "string" && isUuidLike(value) ? value : null;
 }
 
-export function savedChatSetupPath(prefix: string, endpoint: { id: string; provider: string }, action?: SavedChatSetup["action"], previousRotationId?: string | null) {
+export function savedChatSetupPath(prefix: string, endpoint: { id: string; provider: string; status?: string; botExternalId?: string | null; providerAccountId?: string | null }, action?: SavedChatSetup["action"], previousRotationId?: string | null) {
   const query = new URLSearchParams({ provider: endpoint.provider, resume: endpoint.id });
-  if (action === "enter_credentials" || action === "rotate_credentials") { query.set("stage", "credentials"); query.set("reconnect", "1"); }
+  if (action === "enter_credentials" || action === "rotate_credentials") query.set("stage", "credentials");
+  const configured = endpoint.status !== "draft" && (
+    ["active", "paused", "revoked"].includes(endpoint.status ?? "") || !!endpoint.botExternalId || !!endpoint.providerAccountId
+  );
+  if (action === "enter_credentials" && configured) query.set("reconnect", "1");
   if (action === "confirm_identity") query.set("stage", "identity");
   if (action === "rotate_credentials") { query.set("reconnect", "1"); query.set("rotateSecret", "1"); query.set("afterRotationId", previousRotationId ?? "none"); }
   return `/${encodeURIComponent(prefix)}/apps/chat/connect?${query}`;
@@ -913,7 +917,7 @@ export function connectionIntentService(db: Db) {
           ...(options.action === "rotate_credentials" ? { credentialRotation: { previousId: chatCredentialRotationId(endpoint.setup) } } : {}) },
         requestingAgentId: context.agent.id, requestingAgentName: context.agent.name, phase: "authorizing" },
       sourceRunId: context.run.id, sourceIdentityContextId: context.run.activeIdentityContextId,
-      addresseeUserId: context.run.responsibleUserId!, idempotencyKey: `chat-${options.action ?? "authentication"}:${context.issue.id}:${context.run.responsibleUserId}:${endpoint.id}${options.action === "rotate_credentials" || options.action === "enter_credentials" ? `:${context.run.id}` : ""}`,
+      addresseeUserId: context.run.responsibleUserId!, idempotencyKey: `chat-${options.action ?? "authentication"}:${context.issue.id}:${context.run.responsibleUserId}:${endpoint.id}${options.action === "rotate_credentials" || options.action === "enter_credentials" ? `:${context.run.id}` : ""}${options.action === "enter_credentials" ? `:${options.credentialFields ? "all" : "any"}:${credentialFields.join(",")}` : ""}`,
     });
     if (interaction.status !== "pending") throw conflict("This setup request has already been resolved. Follow its recorded outcome.");
     return { interactionId: interaction.id, previousRotationId: connectionIntentPayloadSchema.parse(interaction.payload).savedSetup?.credentialRotation?.previousId ?? null };

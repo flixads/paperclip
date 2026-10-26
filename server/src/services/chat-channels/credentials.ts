@@ -46,6 +46,7 @@ import type {
 import { isUniqueViolation } from "../../db-errors.js";
 
 import {
+  HttpError,
   conflict,
   notFound,
   unprocessable,
@@ -59,6 +60,7 @@ import {
 } from "../chat-teams-credentials.js";
 
 import { secretService } from "../secrets.js";
+import { isSecretProviderClientError } from "../../secrets/types.js";
 
 export const CHAT_HUMAN_CREDENTIAL_FIELDS = ["signingSecret", "webhookSecret", "privateKey", "clientSecret", "projectSecret"] as const;
 
@@ -280,9 +282,22 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
       )
       .then((rows) => rows[0]?.refs ?? []);
     const protectedFields = CHAT_HUMAN_CREDENTIAL_FIELDS.filter(field => credentials[field] !== undefined);
-    const previousValues = protectedFields.length ? await resolveCredentialRefs(endpoint, previousRefs.filter(
-      ref => protectedFields.some(field => ref.configPath === `credentials.${field}`),
-    )) : {};
+    const previousValues: Record<string, string> = {};
+    for (const ref of previousRefs.filter(ref => protectedFields.some(field => ref.configPath === `credentials.${field}`))) {
+      try {
+        Object.assign(previousValues, await resolveCredentialRefs(endpoint, [ref]));
+      } catch (error) {
+        // A valid replacement can repair unavailable old material. Unexpected
+        // database failures and company/scope violations must still abort.
+        const code = error instanceof HttpError && error.details && typeof error.details === "object"
+          ? Reflect.get(error.details, "code") : null;
+        const unavailable = isSecretProviderClientError(error) || (error instanceof HttpError && (
+          ["secret_deleted", "secret_inactive", "version_missing", "version_inactive"].includes(code) ||
+          (error.status === 404 && error.message === "Secret not found" && !error.details)
+        ));
+        if (!unavailable) throw error;
+      }
+    }
     const changedFields = protectedFields.filter(field => credentials[field] !== previousValues[field]);
     const generations = Object.fromEntries(changedFields.map(field => [field, randomUUID()]));
     const refs: ToolCredentialSecretRef[] = [];
