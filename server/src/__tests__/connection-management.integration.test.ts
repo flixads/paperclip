@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { activityLog, agentApiKeys, companies, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins } from "@paperclipai/db";
+import { activityLog, agentApiKeys, companies, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins, adapterAuthSessions, environments } from "@paperclipai/db";
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
@@ -111,6 +111,26 @@ describe("connection management with production default agents", () => {
       expect(validation).toHaveBeenCalled();
       expect((await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.id)))[0].name).toBe("Before validation");
     } finally { validation.mockRestore(); }
+  });
+
+  it("reaches sandbox device-login management as the responsible user and protects another owner's saved session", async () => {
+    const f = await fixture();
+    registerServerAdapter({ ...getServerAdapter("paperclip_runner"), type: "codex_local", loginCapability: {
+      panelMode: "displayed_code", timeoutPolicy: "caller_bounded", getCommand: () => "codex login --device-auth", parsePrompt: () => null,
+    } });
+    try {
+      const [environment] = await server.db.insert(environments).values({ name: `Login fixture ${f.agentId}`, driver: "sandbox" }).returning();
+      const [session] = await server.db.insert(adapterAuthSessions).values({ companyId: f.companyId, environmentId: environment.id, adapterType: "codex_local", startedByUserId: f.userId,
+        publicSessionId: randomUUID(), status: "waiting_for_user", expiresAt: new Date(Date.now() + 60_000), aiConnection: { ownership: "personal", name: "Saved login", allAgents: false, agentIds: [] } }).returning();
+      const path = `/companies/${f.companyId}/adapters/codex_local/login-sessions`;
+      expect(await f.request("GET", `${path}/active`)).toMatchObject({ status: 200, body: { sessionId: session.publicSessionId } });
+      expect(await f.request("GET", `${path}/${session.publicSessionId}`, undefined, f.jwt)).toMatchObject({ status: 200, body: { sessionId: session.publicSessionId } });
+      expect(await f.request("POST", path, {})).toMatchObject({ status: 400 });
+      expect(await f.request("POST", `${path}/${session.publicSessionId}/cancel`, {})).toMatchObject({ status: 200 });
+      await server.db.update(adapterAuthSessions).set({ startedByUserId: randomUUID() }).where(eq(adapterAuthSessions.id, session.id));
+      expect(await f.request("GET", `${path}/${session.publicSessionId}`)).toMatchObject({ status: 404 });
+      expect(await f.request("POST", `${path}/${session.publicSessionId}/cancel`, {})).toMatchObject({ status: 404 });
+    } finally { unregisterServerAdapter("codex_local"); }
   });
 
   it("checks finish access, all-agent sharing, and retained targets against both management grants", async () => {

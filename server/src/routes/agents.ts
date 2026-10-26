@@ -1452,33 +1452,13 @@ export function agentRoutes(
     if (!decision.allowed) throw forbidden(decision.explanation, authorizationDeniedDetails(decision));
   }
 
-  // The single owner-authorization helper for the three adapter login routes. It
-  // requires a board actor, company access, and the same configuration
-  // permission as the adapter Test route (`agents:create`). It returns the
-  // immutable owner identifier: the board user that starts, reads, or cancels the
-  // session. The start route persists this identifier; the status and cancel
-  // routes compare it to the session owner and return 404 on a mismatch, so a
-  // non-owner cannot enumerate a session.
   async function assertCanManageAdapterLogin(
     req: Request,
     companyId: string,
   ): Promise<string> {
-    assertBoard(req);
-    assertCompanyAccess(req, companyId);
-    const decision = await access.decide({
-      actor: req.actor,
-      action: "agents:create",
-      resource: { type: "company", companyId },
-    });
-    if (!decision.allowed) {
-      throw forbidden(decision.explanation, authorizationDeniedDetails(decision));
-    }
-    const userId = req.actor.userId;
-    if (!userId) {
-      throw forbidden(
-        "A board user identity is required to manage an adapter login session.",
-      );
-    }
+    await assertBoardCanManageAgentsForCompany(req, companyId);
+    const userId = connectionRequestUserId(req);
+    if (!userId) throw forbidden("A responsible user identity is required to manage an adapter login session.");
     return userId;
   }
 

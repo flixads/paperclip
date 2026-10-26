@@ -234,5 +234,13 @@ export function connectionManagementService(db: Db) {
  * keeps its original actor, user, task, trust and grant checks; it is never an
  * option accepted from an HTTP caller. Cancelled tasks/runs remain ineligible. */
 export function continuingConnectionManagement(context?: ConnectionManagementContext): ConnectionManagementContext | undefined {
-  return context && { ...context, reauthorize: () => context.reauthorize({ afterHumanAction: true }) };
+  if (!context) return undefined;
+  const continuation: ConnectionManagementContext = { ...context, reauthorize: async () => {
+    await context.reauthorize({ afterHumanAction: true });
+    continuation.workContext = context.workContext;
+    continuation.resource = context.resource;
+    continuation.decision = context.decision;
+    continuation.audit = context.audit;
+  } };
+  return continuation;
 }
