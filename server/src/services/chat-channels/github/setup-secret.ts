@@ -26,6 +26,7 @@ import type {
 
 import {
   conflict,
+  forbidden,
   notFound,
   unprocessable,
 } from "../../../errors.js";
@@ -61,6 +62,9 @@ export function createGitHubSetupSecret(db: Db, options: GitHubSetupSecretOption
     managementContext?: ConnectionManagementContext,
   ) {
     await managementContext?.reauthorize();
+    if (managementContext?.actor.type === "agent") {
+      throw forbidden("Webhook signing secrets require a human setup handoff");
+    }
     const initial = await endpointRecord(endpointId);
     if (!initial) throw notFound("Chat endpoint not found");
     if (initial.endpoint.provider !== "github") {
