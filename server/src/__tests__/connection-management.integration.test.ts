@@ -295,7 +295,7 @@ describe("connection management with production default agents", () => {
     const ownBinding = await f.request("POST", `${path}/bind`, { targetType: "issue", targetId: f.issueId });
     expect(ownBinding, JSON.stringify(ownBinding)).toMatchObject({ status: 201 });
     expect(await f.request("POST", `${path}/unbind`, { targetType: "issue", targetId: f.issueId })).toMatchObject({ status: 200 });
-    for (const target of [{ targetType: "issue", targetId: issue.id }, { targetType: "routine", targetId: routine.id }, { targetType: "gateway", targetId: gateway.body.id }]) {
+    for (const target of [{ targetType: "project", targetId: f.projectId }, { targetType: "issue", targetId: issue.id }, { targetType: "routine", targetId: routine.id }, { targetType: "gateway", targetId: gateway.body.id }]) {
       expect(await f.request("POST", `${path}/bind`, target), JSON.stringify(target)).toMatchObject({ status: 403 });
       const [saved] = await server.db.insert(toolProfileBindings).values({ ...target, companyId: f.companyId, profileId: profile.body.id }).returning();
       expect(await f.request("PATCH", `/tool-profiles/${profile.body.id}`, { description: "Cannot edit retained target" })).toMatchObject({ status: 403 });
