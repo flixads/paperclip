@@ -30,7 +30,6 @@ import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryKeys";
 import { consumeSkillSourceReturn } from "@/lib/skill-source-connect-return";
-import { ApiError } from "@/api/client";
 import { toolsApi } from "@/api/tools";
 import { agentsApi } from "@/api/agents";
 import { accessApi } from "@/api/access";
@@ -63,6 +62,7 @@ import { isAppAggregator } from "@paperclipai/shared/aggregator-apps";
 import { actionPermissionMutation } from "./app-detail/action-permissions";
 import { RailwayAccessPanel } from "./app-detail/RailwayAccessPanel";
 import { ReviewPanel } from "./app-detail/ReviewPanel";
+import { AccessRetryBanner } from "./app-detail/AccessRetryBanner";
 import {
   ReconnectCard,
   DangerZone,
@@ -83,7 +83,8 @@ export function AppDetail(props: { renderActions?: (connection: ToolConnection) 
   if (connection.isPending) return <p role="status">Loading connection…</p>;
   if (connection.error) return <p role="alert">{connection.error.message}</p>;
   const pluginKey = connection.data && aiConnectionRouterPluginKey(connection.data);
-  return pluginKey ? <AiConnectionPoolConnector pluginKey={pluginKey} connection={connection.data} /> : <StandardAppDetail {...props} />;
+  // Keyed so page state, such as a failed refresh's recovery link, never carries over to another connection.
+  return pluginKey ? <AiConnectionPoolConnector pluginKey={pluginKey} connection={connection.data} /> : <StandardAppDetail key={connectionId} {...props} />;
 }
 
 function StandardAppDetail({ renderActions, renderAgentSettings, renderConnectionSettings, onReconnect }: {
@@ -482,7 +483,6 @@ function StandardAppDetail({ renderActions, renderAgentSettings, renderConnectio
       });
     },
   });
-  const githubRecoveryUrl = githubAccessRecoveryUrl(refreshGitHubAccess.error);
 
   const apply = (mutate: {
     enabled?: Set<string>;
@@ -600,17 +600,12 @@ function StandardAppDetail({ renderActions, renderAgentSettings, renderConnectio
       />
 
       {status.tone === "attention" && connection.requiresReauthorization === false && (
-        <div role="status">
-          <p>{connection.healthMessage || "GitHub access could not be checked. Try again."}</p>
-          {githubRecoveryUrl ? (
-            <Button asChild variant="outline">
-              <a href={githubRecoveryUrl} target="_blank" rel="noreferrer">Open installation settings on GitHub</a>
-            </Button>
-          ) : null}
-          <Button variant="outline" disabled={refreshGitHubAccess.isPending} onClick={() => refreshGitHubAccess.mutate()}>
-            Retry access
-          </Button>
-        </div>
+        <AccessRetryBanner
+          message={connection.healthMessage}
+          error={refreshGitHubAccess.error}
+          pending={refreshGitHubAccess.isPending}
+          onRetry={() => refreshGitHubAccess.mutate()}
+        />
       )}
       {needsReconnect && (
         <ReconnectCard
@@ -890,19 +885,6 @@ function unverifiedRemoteHost(connection: ToolConnection): string | null {
 
   try {
     return new URL(value).host || null;
-  } catch {
-    return null;
-  }
-}
-
-/** GitHub page that resolves a failed Refresh access, such as Unsuspend. */
-function githubAccessRecoveryUrl(error: unknown): string | null {
-  if (!(error instanceof ApiError) || !error.body || typeof error.body !== "object") return null;
-  const details = (error.body as { details?: { code?: unknown; managementUrl?: unknown } }).details;
-  if (details?.code !== "github_installation_required" || typeof details.managementUrl !== "string") return null;
-  try {
-    const url = new URL(details.managementUrl);
-    return url.protocol === "https:" && url.hostname.toLowerCase() === "github.com" ? url.toString() : null;
   } catch {
     return null;
   }
