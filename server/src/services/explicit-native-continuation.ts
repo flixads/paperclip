@@ -31,8 +31,6 @@ import { queuedCommentIdsFromWakePayload } from "./issue-queued-comment-queue.js
 type Run = typeof heartbeatRuns.$inferSelect;
 const terminal = ["failed", "interrupted", "timed_out", "cancelled"];
 
-// Assignment updates can carry a new human comment. This classifies the wake;
-// the persisted comment, author, task and execution must still be validated.
 export function isUserCommentContinuationReason(reason: string | null | undefined): boolean {
   return reason === "issue_commented" || reason === "issue_reopened_via_comment" || reason === "issue_assigned";
 }
