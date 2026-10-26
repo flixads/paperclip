@@ -205,9 +205,9 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 API: `present` — `GET /api/tool-profiles/{profileId}/new-tools`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Evidence: `verified` — [authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) exercise saved application/catalog/tool-name/risk selectors, allow-all profiles, managed empty profiles, personal-account visibility, and scoped grants through actual keys and run JWTs.
+Verification: `passed` — local assembled server and real database; inaccessible profile resources are omitted from lists and denied before new-tool or effective-profile data is returned. Proposed broad entries and installed connections use the same authority checks.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-tool-profiles-new-tools-review`
 
