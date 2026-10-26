@@ -211,11 +211,11 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 ### `post-chat-endpoints-github-app`
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/app`; JSON REST.
-Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
-Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
-Gaps: Provider fixtures do not qualify live provider setup or availability.
+Agent access: `available` — agent REST and default native `search_api` / `call_api` return a saved human credential-entry handoff; agents may send an empty body.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). A human session imports the App credentials and signing key. Delegated service import is rejected, and agent requests persist no caller-chosen key.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts), [provider service](../../server/src/services/chat-channels/github/app-setup.ts), and [actual-auth fixture](../../server/src/__tests__/connection-management.integration.test.ts). Agent key/JWT handoffs leave vault refs unchanged; human import persists credentials, then agent repository discovery and verification continue.
+Verification: `passed` — deterministic provider fixtures, assembled server and [saved-screen tests](../../ui/src/pages/apps/chat/GitHubChatSetup.test.tsx).
+Gaps: Human credential entry is intentional; no live provider qualification.
 
 ### `post-chat-endpoints-github-repositories-refresh`
 
@@ -277,7 +277,7 @@ API: `present` — `POST /api/chat-endpoints/{endpointId}/setup-secret`; JSON RE
 Agent access: `available` — agent REST and default native `search_api` / `call_api` return the saved endpoint's `requiredUserAction` handoff. Only a human session can rotate and receive the signing secret.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Agents cannot generate or export the GitHub webhook signing secret; the service also rejects delegated generation.
 Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts), [provider service](../../server/src/services/chat-channels/github/setup-secret.ts), and [authenticated regression](../../server/src/__tests__/connection-management.integration.test.ts). Actual key/JWT requests return a handoff without changing credential refs; a human session can rotate and persist new refs.
-Verification: `passed` — deterministic provider fixtures / local assembled server. The regression failed before the fix; all 41 assembled-server scenarios passed afterward.
+Verification: `passed` — deterministic provider fixtures / local assembled server. The regression failed before the fix; all 42 assembled-server scenarios passed afterward. Rotation remains pending through old health and generation/reconnect failures. A completion marker commits with new vault refs and cleared webhook verification; restored verified health is also required. Saved links open the one-time human rotation screen.
 Gaps: No live GitHub rotation qualification; plaintext signing-secret setup intentionally remains a human step.
 
 ### `get-chat-endpoints-resources`

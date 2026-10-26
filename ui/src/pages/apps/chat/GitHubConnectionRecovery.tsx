@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { AlertTriangle, CircleHelp, ExternalLink, Loader2 } from "lucide-react";
 import type { ChatEndpoint } from "@/api/chatEndpoints";
+import { chatEndpointsApi } from "@/api/chatEndpoints";
+import { CopyText } from "@/components/CopyText";
 import { SetupWizardFooter } from "@/components/SetupWizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,9 +42,10 @@ function CredentialLabel({ id, label, help }: { id: string; label: string; help:
   </div>;
 }
 
-export function GitHubAppRecovery({ endpoint, reconnect, onConnect, onExit }: {
+export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = false, onConnect, onExit }: {
   endpoint: ChatEndpoint;
   reconnect: boolean;
+  rotateWebhookSecret?: boolean;
   onConnect: (credentials?: GitHubAppCredentials) => Promise<void>;
   onExit: () => void;
 }) {
@@ -52,6 +55,7 @@ export function GitHubAppRecovery({ endpoint, reconnect, onConnect, onExit }: {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [fileError, setFileError] = useState("");
+  const [rotationSecret, setRotationSecret] = useState("");
   const needsWebhookSecret = !reconnect && !["active", "paused", "revoked"].includes(endpoint.status);
   const appName = endpoint.botLabel ?? endpoint.setup?.github?.appName ?? "your existing App";
   const appIdInvalid = !!credentials.appId.trim() && !/^\d+$/.test(credentials.appId.trim());
@@ -66,17 +70,36 @@ export function GitHubAppRecovery({ endpoint, reconnect, onConnect, onExit }: {
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not reconnect GitHub. Try again."); }
     finally { setPending(false); }
   }
+  async function generateSecret() {
+    setPending(true);
+    setError("");
+    setRotationSecret("");
+    try { setRotationSecret((await chatEndpointsApi.generateSetupSecret(endpoint.id)).webhookSecret); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not generate the webhook secret. Try again."); }
+    finally { setPending(false); }
+  }
   return <div className="space-y-6">
     {reconnect && <div className="space-y-3">
       <p className="text-sm">Restore <strong>{appName}</strong> using its saved credentials. Paperclip will check the App and its installation, then repair event delivery.</p>
       <p className="text-sm text-muted-foreground">Your agent, repository choices, review settings, and task history stay attached to this connection. You don’t need to create another GitHub App.</p>
     </div>}
+    {rotateWebhookSecret && <section aria-label="Rotate webhook secret" className="space-y-3">
+      <h2 className="text-base font-semibold">Rotate the webhook secret</h2>
+      <p className="text-sm">Generate a new secret, then replace the webhook secret in <a href={gitHubAppSettingsUrl(endpoint)} target="_blank" rel="noreferrer" className="underline">GitHub App settings</a>. GitHub must verify the new secret before you reconnect.</p>
+      <p className="text-sm text-muted-foreground">Generating immediately invalidates the previous secret. This value is shown only here; keep this page open until you have copied it.</p>
+      <Button type="button" variant="outline" disabled={pending} onClick={() => void generateSecret()}>Generate webhook secret</Button>
+      {rotationSecret && <div className="space-y-2">
+        <Label htmlFor="github-rotation-secret">New webhook secret</Label>
+        <Input id="github-rotation-secret" type="password" autoComplete="off" readOnly value={rotationSecret} />
+        <CopyText text={rotationSecret} ariaLabel="Copy webhook secret" className="text-sm underline">Copy webhook secret</CopyText>
+      </div>}
+    </section>}
     {error && <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
-      <p className="font-medium">{replace ? "Could not reconnect this App" : "Could not reconnect the saved App"}</p>
+      <p className="font-medium">{rotateWebhookSecret ? "Could not finish secret rotation" : replace ? "Could not reconnect this App" : "Could not reconnect the saved App"}</p>
       <p className="break-words">{error}</p>
-      <p>Try again if the service is temporarily unavailable. If GitHub rejected the saved key, replace the credentials for this same App below.</p>
+      <p>{rotateWebhookSecret ? "Use the newest secret in GitHub App settings, then retry reconnecting after GitHub verifies delivery." : "Try again if the service is temporarily unavailable. If GitHub rejected the saved key, replace the credentials for this same App below."}</p>
     </div>}
-    {reconnect && <Button variant="link" className="h-auto p-0" disabled={pending} onClick={() => { setReplace(!replace); setError(""); }}>
+    {reconnect && !rotateWebhookSecret && <Button variant="link" className="h-auto p-0" disabled={pending} onClick={() => { setReplace(!replace); setError(""); }}>
       {replace ? "Use saved credentials instead" : "Replace App credentials…"}
     </Button>}
     {replace && <div className="space-y-6">
@@ -123,7 +146,7 @@ export function GitHubAppRecovery({ endpoint, reconnect, onConnect, onExit }: {
       </div>}
     </div>}
     <SetupWizardFooter onSaveExit={onExit} disabled={pending}>
-      <Button aria-label={actionLabel} disabled={pending || incomplete} onClick={() => void connect()}>
+      <Button aria-label={actionLabel} disabled={pending || incomplete || (rotateWebhookSecret && !rotationSecret)} onClick={() => void connect()}>
         {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
         <span className="sm:hidden" aria-hidden="true">{pending ? "Checking…" : reconnect ? "Reconnect" : "Connect"}</span>
         <span className="hidden sm:inline" aria-hidden="true">{actionLabel}</span>

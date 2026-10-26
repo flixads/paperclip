@@ -80,7 +80,8 @@ export function GitHubChatSetup() {
   const queryClient = useQueryClient();
   const resume = params.get("resume");
   const identityOnly = params.get("stage") === "identity";
-  const reconnect = params.get("reconnect") === "1";
+  const rotateWebhookSecret = params.get("rotateSecret") === "1";
+  const reconnect = params.get("reconnect") === "1" || rotateWebhookSecret;
   const [agentId, setAgentId] = useState(params.get("agentId") ?? "");
   const [ownerType, setOwnerType] = useState<"personal" | "organization">(
     "personal",
@@ -91,7 +92,7 @@ export function GitHubChatSetup() {
   const [busy, setBusy] = useState(false);
   const [submitManifest, setSubmitManifest] = useState(false);
   const [error, setError] = useState("");
-  const [existing, setExisting] = useState(params.get("reconnect") === "1");
+  const [existing, setExisting] = useState(reconnect || params.get("stage") === "credentials");
   const [appNotCreated, setAppNotCreated] = useState(false);
   const [legacyAccount, setLegacyAccount] = useState("");
   const [identityLinked, setIdentityLinked] = useState(false);
@@ -378,6 +379,7 @@ export function GitHubChatSetup() {
           key={bot.id}
           endpoint={bot}
           reconnect={reconnect}
+          rotateWebhookSecret={rotateWebhookSecret}
           onExit={exit}
           onConnect={async (credentials) => {
             if (reconnect || ["active", "paused", "revoked"].includes(bot.status)) {

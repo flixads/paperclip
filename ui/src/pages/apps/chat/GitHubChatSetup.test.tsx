@@ -72,6 +72,7 @@ vi.mock("@/api/chatEndpoints", () => ({
     get: vi.fn(),
     listResources: vi.fn(),
     setup: vi.fn(),
+    generateSetupSecret: vi.fn(),
   },
 }));
 vi.mock("@/api/projects", () => ({ projectsApi: { repositoryOptions: vi.fn() } }));
@@ -256,6 +257,43 @@ describe("GitHub App wizard", () => {
     expect(container.textContent).not.toContain("until the signed ping arrives");
     expect(container.textContent).not.toContain("GitHub connected");
     expect(githubChatApi.registration).not.toHaveBeenCalled();
+  });
+  it("opens a saved credential-entry handoff without starting another App registration", async () => {
+    await render("resume=draft-1&stage=credentials");
+    expect(container.querySelector("#github-app-id")).not.toBeNull();
+    expect(container.querySelector("#github-webhook-secret")).not.toBeNull();
+    expect(githubChatApi.advance).not.toHaveBeenCalled();
+    expect(githubChatApi.registration).not.toHaveBeenCalled();
+  });
+  it("keeps a saved rotation handoff open through generation and reconnect failures", async () => {
+    fixture.endpoint.status = "active";
+    fixture.endpoint.botExternalId = "1234";
+    const secret = "a".repeat(64);
+    vi.mocked(githubChatApi.advance).mockResolvedValue({ endpointId: "draft-1", state: "connected" } as any);
+    vi.mocked(chatEndpointsApi.generateSetupSecret).mockRejectedValueOnce(new Error("Temporarily unavailable")).mockResolvedValue({ webhookSecret: secret });
+    vi.mocked(chatEndpointsApi.setup).mockRejectedValueOnce(new Error("Waiting for the new signed webhook")).mockResolvedValue(fixture.endpoint);
+    await render("resume=draft-1&stage=credentials&reconnect=1&rotateSecret=1");
+    const reconnect = () => [...container.querySelectorAll("button")].find(button => button.getAttribute("aria-label") === "Reconnect saved App")!;
+    const generate = () => [...container.querySelectorAll("button")].find(button => button.textContent === "Generate webhook secret")!;
+    expect(reconnect().disabled).toBe(true);
+    expect(chatEndpointsApi.generateSetupSecret).not.toHaveBeenCalled();
+    expect(githubChatApi.advance).not.toHaveBeenCalled();
+    await act(async () => generate().click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Temporarily unavailable");
+    expect(reconnect().disabled).toBe(true);
+    await act(async () => generate().click());
+    expect(chatEndpointsApi.generateSetupSecret).toHaveBeenLastCalledWith("draft-1");
+    expect((container.querySelector("#github-rotation-secret") as HTMLInputElement).value).toBe(secret);
+    expect((container.querySelector("#github-rotation-secret") as HTMLInputElement).type).toBe("password");
+    await act(async () => (container.querySelector('[aria-label="Copy webhook secret"]') as HTMLButtonElement).click());
+    expect(copyTextToClipboard).toHaveBeenLastCalledWith(secret);
+    await act(async () => reconnect().click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain("Waiting for the new signed webhook");
+    expect(reconnect().disabled).toBe(false);
+    await act(async () => reconnect().click());
+    expect(chatEndpointsApi.setup).toHaveBeenLastCalledWith("draft-1", { action: "reconnect" });
+    expect(githubChatApi.connectApp).not.toHaveBeenCalled();
+    expect(chatEndpointsApi.create).not.toHaveBeenCalled();
   });
   it("reconnects the same App using vaulted credentials without requiring another paste", async () => {
     fixture.endpoint.status = "attention";
