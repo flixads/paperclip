@@ -7434,14 +7434,10 @@ export function createToolGatewayService(
   async function assertDelegatedTestCredentialAccess(session: ToolGatewaySession, tool: ToolGatewayDescriptor) {
     const caller = delegatedTestCallerSession(session);
     if (!caller || !tool.connectionId) return;
-    if (!(await policyService.hasProfileAccess(policyInputForTool({ session: caller, tool })))) {
-      throw new ToolGatewayHttpError(403, "Connection is not available in the acting agent's profiles", "test_caller_connection_unavailable");
-    }
     const [connection] = await db.select().from(toolConnections).where(and(
       eq(toolConnections.companyId, session.companyId), eq(toolConnections.id, tool.connectionId),
     ));
     if (!connection) throw new ToolGatewayHttpError(404, "Tool connection not found", "connection_not_found");
-    if (connection.authKind === "none") return;
     // Resolve consent metadata before any vault read. Testing another agent
     // cannot select that agent's dedicated credential or a different identity.
     const callerGrant = await resolveConnectionGrant(caller, connection, false);
