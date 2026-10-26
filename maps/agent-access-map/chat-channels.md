@@ -21,8 +21,6 @@ Review: `operation-reviewed`.
 
 ### `get-companies-chat-endpoints`
 
-Capability ID: `chat-channels/get-companies-chat-endpoints`.
-
 API: `present` — `GET /api/companies/{companyId}/chat-endpoints`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -31,8 +29,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-companies-chat-endpoints`
-
-Capability ID: `chat-channels/post-companies-chat-endpoints`.
 
 API: `present` — `POST /api/companies/{companyId}/chat-endpoints`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -43,8 +39,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `get-chat-endpoints`
 
-Capability ID: `chat-channels/get-chat-endpoints`.
-
 API: `present` — `GET /api/chat-endpoints/{endpointId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -53,8 +47,6 @@ Verification: `passed` — deterministic provider fixtures / local assembled ser
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `get-companies-chat-slack-setup-options`
-
-Capability ID: `chat-channels/get-companies-chat-slack-setup-options`.
 
 API: `present` — `GET /api/companies/{companyId}/chat-slack/setup-options`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -65,8 +57,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-chat-endpoints-slack-managed-authorize`
 
-Capability ID: `chat-channels/post-chat-endpoints-slack-managed-authorize`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/managed/authorize`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -75,8 +65,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-chat-endpoints-slack-managed-provision`
-
-Capability ID: `chat-channels/post-chat-endpoints-slack-managed-provision`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/managed/provision`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -87,8 +75,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `delete-companies-chat-slack-manager-grants`
 
-Capability ID: `chat-channels/delete-companies-chat-slack-manager-grants`.
-
 API: `present` — `DELETE /api/companies/{companyId}/chat-slack/manager-grants/{grantId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -97,8 +83,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-chat-slack-managed-oauth-callback`
-
-Capability ID: `chat-channels/get-chat-slack-managed-oauth-callback`.
 
 API: `present` — `GET /api/chat-slack/managed/oauth/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
@@ -109,8 +93,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `post-chat-endpoints-slack-registration`
 
-Capability ID: `chat-channels/post-chat-endpoints-slack-registration`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/registration`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -119,8 +101,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-chat-endpoints-slack-install`
-
-Capability ID: `chat-channels/post-chat-endpoints-slack-install`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/install`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -131,8 +111,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-chat-slack-oauth-callback`
 
-Capability ID: `chat-channels/get-chat-slack-oauth-callback`.
-
 API: `present` — `GET /api/chat-slack/oauth/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
 Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
@@ -141,8 +119,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-chat-endpoints-github-configuration`
-
-Capability ID: `chat-channels/get-chat-endpoints-github-configuration`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/github/configuration`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -153,8 +129,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `put-chat-endpoints-github-configuration`
 
-Capability ID: `chat-channels/put-chat-endpoints-github-configuration`.
-
 API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/configuration`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -163,8 +137,6 @@ Verification: `passed` — deterministic provider fixtures / local assembled ser
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-github-verify`
-
-Capability ID: `chat-channels/post-chat-endpoints-github-verify`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/verify`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -175,8 +147,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `put-chat-endpoints-github-progress`
 
-Capability ID: `chat-channels/put-chat-endpoints-github-progress`.
-
 API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/progress`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -185,8 +155,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-chat-endpoints-github-personal-connections`
-
-Capability ID: `chat-channels/get-chat-endpoints-github-personal-connections`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/github/personal-connections`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -197,8 +165,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-chat-endpoints-github-people-lookup`
 
-Capability ID: `chat-channels/post-chat-endpoints-github-people-lookup`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/people/lookup`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -207,8 +173,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-chat-endpoints-github-registration`
-
-Capability ID: `chat-channels/post-chat-endpoints-github-registration`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/registration`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -219,8 +183,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-github-registration-restart`
 
-Capability ID: `chat-channels/post-chat-endpoints-github-registration-restart`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/registration/restart`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -229,8 +191,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `put-chat-endpoints-github-draft`
-
-Capability ID: `chat-channels/put-chat-endpoints-github-draft`.
 
 API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/draft`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -241,8 +201,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-chat-endpoints-github-setup`
 
-Capability ID: `chat-channels/post-chat-endpoints-github-setup`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/setup`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -251,8 +209,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-chat-endpoints-github-app`
-
-Capability ID: `chat-channels/post-chat-endpoints-github-app`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/app`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -263,8 +219,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-github-repositories-refresh`
 
-Capability ID: `chat-channels/post-chat-endpoints-github-repositories-refresh`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/repositories/refresh`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -273,8 +227,6 @@ Verification: `passed` — deterministic provider fixtures / local assembled ser
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `get-chat-endpoints-github-repositories`
-
-Capability ID: `chat-channels/get-chat-endpoints-github-repositories`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/github/repositories`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -285,8 +237,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `put-chat-endpoints-github-repositories-access`
 
-Capability ID: `chat-channels/put-chat-endpoints-github-repositories-access`.
-
 API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/repositories/access`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -295,8 +245,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `patch-chat-endpoints`
-
-Capability ID: `chat-channels/patch-chat-endpoints`.
 
 API: `present` — `PATCH /api/chat-endpoints/{endpointId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -307,8 +255,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-photon-inspect`
 
-Capability ID: `chat-channels/post-chat-endpoints-photon-inspect`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/photon/inspect`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -317,8 +263,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-chat-endpoints-setup`
-
-Capability ID: `chat-channels/post-chat-endpoints-setup`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/setup`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -329,8 +273,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-setup-secret`
 
-Capability ID: `chat-channels/post-chat-endpoints-setup-secret`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/setup-secret`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -339,8 +281,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-chat-endpoints-resources`
-
-Capability ID: `chat-channels/get-chat-endpoints-resources`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/resources`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -351,8 +291,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `put-chat-endpoints-resources`
 
-Capability ID: `chat-channels/put-chat-endpoints-resources`.
-
 API: `present` — `PUT /api/chat-endpoints/{endpointId}/resources`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -361,8 +299,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-companies-email-connections`
-
-Capability ID: `chat-channels/get-companies-email-connections`.
 
 API: `present` — `GET /api/companies/{companyId}/email/connections`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -373,8 +309,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-companies-email-connections`
 
-Capability ID: `chat-channels/post-companies-email-connections`.
-
 API: `present` — `POST /api/companies/{companyId}/email/connections`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -383,8 +317,6 @@ Verification: `passed` — deterministic provider fixtures / local assembled ser
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-companies-email-connections-inspect`
-
-Capability ID: `chat-channels/post-companies-email-connections-inspect`.
 
 API: `present` — `POST /api/companies/{companyId}/email/connections/{connectionId}/inspect`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -395,8 +327,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-email-connections-check-address`
 
-Capability ID: `chat-channels/post-companies-email-connections-check-address`.
-
 API: `present` — `POST /api/companies/{companyId}/email/connections/{connectionId}/check-address`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -405,8 +335,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-companies-email-inboxes`
-
-Capability ID: `chat-channels/get-companies-email-inboxes`.
 
 API: `present` — `GET /api/companies/{companyId}/email/inboxes`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
@@ -417,8 +345,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-email-inspect`
 
-Capability ID: `chat-channels/post-companies-email-inspect`.
-
 API: `present` — `POST /api/companies/{companyId}/email/inspect`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -428,8 +354,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-email-inboxes`
 
-Capability ID: `chat-channels/post-companies-email-inboxes`.
-
 API: `present` — `POST /api/companies/{companyId}/email/inboxes`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -438,8 +362,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-companies-email-deliveries`
-
-Capability ID: `chat-channels/get-companies-email-deliveries`.
 
 API: `present` — `GET /api/companies/{companyId}/email/deliveries/{publicationId}`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
@@ -455,8 +377,6 @@ Review: `operation-reviewed`.
 
 ### `post-chat-endpoints-github-identity`
 
-Capability ID: `chat-channels/post-chat-endpoints-github-identity`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/identity`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -465,8 +385,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-chat-endpoints-github-identity-start`
-
-Capability ID: `chat-channels/post-chat-endpoints-github-identity-start`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/identity/start`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -477,8 +395,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-github-identity-confirm`
 
-Capability ID: `chat-channels/post-chat-endpoints-github-identity-confirm`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/github/identity/confirm`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -487,8 +403,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-chat-endpoints-principals`
-
-Capability ID: `chat-channels/get-chat-endpoints-principals`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/principals`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -499,8 +413,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-chat-endpoints-principals-link-intent`
 
-Capability ID: `chat-channels/post-chat-endpoints-principals-link-intent`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/principals/{principalId}/link-intent`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -509,8 +421,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `delete-chat-endpoints-principals-link`
-
-Capability ID: `chat-channels/delete-chat-endpoints-principals-link`.
 
 API: `present` — `DELETE /api/chat-endpoints/{endpointId}/principals/{principalId}/link`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -521,8 +431,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-chat-identity-links-confirm`
 
-Capability ID: `chat-channels/post-chat-identity-links-confirm`.
-
 API: `present` — `POST /api/chat-identity-links/confirm`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -531,8 +439,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-chat-identity-links-request-access`
-
-Capability ID: `chat-channels/post-chat-identity-links-request-access`.
 
 API: `present` — `POST /api/chat-identity-links/request-access`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -543,8 +449,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `get-chat-identity-links-preview`
 
-Capability ID: `chat-channels/get-chat-identity-links-preview`.
-
 API: `present` — `GET /api/chat-identity-links/preview`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -553,8 +457,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-api-chat-github-manifest-callback`
-
-Capability ID: `chat-channels/get-api-chat-github-manifest-callback`.
 
 API: `present` — `GET /api/chat-github/manifest/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
@@ -565,8 +467,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `get-api-chat-github-cloud-callback`
 
-Capability ID: `chat-channels/get-api-chat-github-cloud-callback`.
-
 API: `present` — `GET /api/chat-github/cloud/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
 Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
@@ -575,8 +475,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-api-chat-github-identity-callback`
-
-Capability ID: `chat-channels/get-api-chat-github-identity-callback`.
 
 API: `present` — `GET /api/chat-github/identity/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
@@ -592,8 +490,6 @@ Review: `operation-reviewed`.
 
 ### `get-chat-endpoints-github-review-detail`
 
-Capability ID: `chat-channels/get-chat-endpoints-github-review-detail`.
-
 API: `present` — `GET /api/chat-endpoints/{endpointId}/github/reviews/{reviewId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -602,8 +498,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-chat-endpoints-github-reviews`
-
-Capability ID: `chat-channels/get-chat-endpoints-github-reviews`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/github/reviews`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -614,8 +508,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-chat-endpoints-conversations`
 
-Capability ID: `chat-channels/get-chat-endpoints-conversations`.
-
 API: `present` — `GET /api/chat-endpoints/{endpointId}/conversations`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -624,8 +516,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-chat-endpoints-conversations-publications`
-
-Capability ID: `chat-channels/post-chat-endpoints-conversations-publications`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/conversations/{conversationId}/publications`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -636,8 +526,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `get-chat-endpoints-conversations-publications-status`
 
-Capability ID: `chat-channels/get-chat-endpoints-conversations-publications-status`.
-
 API: `present` — `GET /api/chat-endpoints/{endpointId}/conversations/{conversationId}/publications/{publicationId}/status`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -646,8 +534,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-issues-chat-binding`
-
-Capability ID: `chat-channels/get-issues-chat-binding`.
 
 API: `present` — `GET /api/issues/{issueId}/chat-binding`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -658,8 +544,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-api-chat-webhooks`
 
-Capability ID: `chat-channels/post-api-chat-webhooks`.
-
 API: `present` — `POST /api/chat-webhooks/{publicId}/{provider}`; provider webhook ingress.
 Agent access: `not-applicable` — provider-signed inbound events; agent keys and gateway tokens cannot authenticate this route.
 Policy: The provider verifies the payload signature and binds the endpoint/company. The request has no agent principal.
@@ -668,8 +552,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Provider ingress has no agent invocation path. Provider signature validation remains required.
 
 ### `post-companies-email-send`
-
-Capability ID: `chat-channels/post-companies-email-send`.
 
 API: `present` — `POST /api/companies/{companyId}/email/send`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
@@ -680,8 +562,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-companies-email-tasks`
 
-Capability ID: `chat-channels/get-companies-email-tasks`.
-
 API: `present` — `GET /api/companies/{companyId}/email/tasks/{issueId}`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
 Policy: Existing run-bound tool, scoped credential lease, execution policy, or assigned-email-agent checks; connection-management grants do not bypass these controls.
@@ -690,8 +570,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-api-chat-webhooks-agentmail`
-
-Capability ID: `chat-channels/post-api-chat-webhooks-agentmail`.
 
 API: `present` — `POST /api/chat-webhooks/agentmail/{publicId}`; provider webhook ingress.
 Agent access: `not-applicable` — provider-signed inbound events; agent keys and gateway tokens cannot authenticate this route.
@@ -725,8 +603,6 @@ Gaps: Multipart upload is not a JSON native API call. Live chat file delivery re
 
 ### `post-chat-endpoints-publications-replay`
 
-Capability ID: `chat-channels/post-chat-endpoints-publications-replay`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/publications/{publicationId}/replay`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -735,8 +611,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-chat-endpoints-publications-resolve`
-
-Capability ID: `chat-channels/post-chat-endpoints-publications-resolve`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/publications/{publicationId}/resolve`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -747,8 +621,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `post-chat-endpoints-actions-resolve`
 
-Capability ID: `chat-channels/post-chat-endpoints-actions-resolve`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/actions/{actionId}/resolve`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -757,8 +629,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-companies-email-deliveries-resolve`
-
-Capability ID: `chat-channels/post-companies-email-deliveries-resolve`.
 
 API: `present` — `POST /api/companies/{companyId}/email/deliveries/{publicationId}/resolve`; JSON REST.
 Agent access: `restricted` — human connection manager records the outcome of an uncertain external delivery. Agents use normal governed send/status operations.
@@ -774,8 +644,6 @@ Review: `operation-reviewed`.
 
 ### `post-chat-endpoints-slack-test-message`
 
-Capability ID: `chat-channels/post-chat-endpoints-slack-test-message`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/test-message`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -784,8 +652,6 @@ Verification: `passed` — deterministic provider fixtures / local assembled ser
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-slack-resume`
-
-Capability ID: `chat-channels/post-chat-endpoints-slack-resume`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/resume`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -796,8 +662,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-chat-endpoints-test`
 
-Capability ID: `chat-channels/post-chat-endpoints-test`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/test`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -806,8 +670,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-chat-endpoints-finish`
-
-Capability ID: `chat-channels/post-chat-endpoints-finish`.
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/finish`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -818,8 +680,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-chat-endpoints-test-status`
 
-Capability ID: `chat-channels/get-chat-endpoints-test-status`.
-
 API: `present` — `GET /api/chat-endpoints/{endpointId}/test-status`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -828,8 +688,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-chat-endpoints-activity`
-
-Capability ID: `chat-channels/get-chat-endpoints-activity`.
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/activity`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -840,8 +698,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-chat-endpoints-deliveries-replay`
 
-Capability ID: `chat-channels/post-chat-endpoints-deliveries-replay`.
-
 API: `present` — `POST /api/chat-endpoints/{endpointId}/deliveries/{deliveryId}/replay`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -851,8 +707,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `post-email-inboxes-control`
 
-Capability ID: `chat-channels/post-email-inboxes-control`.
-
 API: `present` — `POST /api/email/inboxes/{endpointId}/control`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -861,8 +715,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-email-inboxes-reconnect`
-
-Capability ID: `chat-channels/post-email-inboxes-reconnect`.
 
 API: `present` — `POST /api/email/inboxes/{endpointId}/reconnect`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.

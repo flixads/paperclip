@@ -32,8 +32,6 @@ Review: `operation-reviewed`.
 
 ### `get-companies-tools-gallery`
 
-Capability ID: `connection-setup/get-companies-tools-gallery`.
-
 API: `present` — `GET /api/companies/{companyId}/tools/gallery`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -42,8 +40,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-companies-tools-apps-preflight`
-
-Capability ID: `connection-setup/get-companies-tools-apps-preflight`.
 
 API: `present` — `GET /api/companies/{companyId}/tools/apps/{galleryKey}/preflight`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -54,8 +50,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-companies-tools-examples`
 
-Capability ID: `connection-setup/get-companies-tools-examples`.
-
 API: `present` — `GET /api/companies/{companyId}/tools/examples`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -64,8 +58,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-companies-tools-examples-install`
-
-Capability ID: `connection-setup/post-companies-tools-examples-install`.
 
 API: `present` — `POST /api/companies/{companyId}/tools/examples/{id}/install`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -76,8 +68,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-tools-examples-smoke`
 
-Capability ID: `connection-setup/post-companies-tools-examples-smoke`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/examples/{id}/smoke`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -86,8 +76,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-companies-tools-stdio-templates`
-
-Capability ID: `connection-setup/get-companies-tools-stdio-templates`.
 
 API: `present` — `GET /api/companies/{companyId}/tools/stdio-templates`; JSON REST.
 Agent access: `operator-only` — a board user reads host command templates. Agents select approved provider templates through the catalog.
@@ -98,8 +86,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `post-companies-tools-stdio-templates`
 
-Capability ID: `connection-setup/post-companies-tools-stdio-templates`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/stdio-templates`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -108,8 +94,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-companies-tools-stdio-templates-disable`
-
-Capability ID: `connection-setup/post-companies-tools-stdio-templates-disable`.
 
 API: `present` — `POST /api/companies/{companyId}/tools/stdio-templates/{templateId}/disable`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -120,8 +104,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `post-companies-tools-mcp-import-json`
 
-Capability ID: `connection-setup/post-companies-tools-mcp-import-json`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/mcp/import-json`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -130,8 +112,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-runtime-tools-connections-search`
-
-Capability ID: `connection-setup/post-runtime-tools-connections-search`.
 
 API: `present` — `POST /runtime-tools/connections/search`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
@@ -147,8 +127,6 @@ Review: `operation-reviewed`.
 
 ### `post-companies-tools-apps-connect`
 
-Capability ID: `connection-setup/post-companies-tools-apps-connect`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/apps/connect`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -157,8 +135,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-companies-tools-connections`
-
-Capability ID: `connection-setup/post-companies-tools-connections`.
 
 API: `present` — `POST /api/companies/{companyId}/tools/connections`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -174,8 +150,6 @@ Review: `operation-reviewed`.
 
 ### `post-agents-me-connections-start-authorization`
 
-Capability ID: `connection-setup/post-agents-me-connections-start-authorization`.
-
 API: `present` — `POST /api/agents/me/connections/{connectionId}/start-authorization`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
 Policy: `tools:manage_connections`, an active run, and the server-derived responsible user matching the authorization subject; shared scope/trust/user checks apply. Human authentication remains a handoff, with the actual agent retained for audit. JSON authorization initiation is explicitly REST-callable.
@@ -184,8 +158,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-agents-me-connections-token`
-
-Capability ID: `connection-setup/post-agents-me-connections-token`.
 
 API: `present` — `POST /api/agents/me/connections/{connectionId}/token`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
@@ -196,8 +168,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-tools-connections-start-authorization`
 
-Capability ID: `connection-setup/post-companies-tools-connections-start-authorization`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/connections/{connectionId}/start-authorization`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -207,8 +177,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-tools-oauth-start`
 
-Capability ID: `connection-setup/post-tools-oauth-start`.
-
 API: `present` — `POST /api/tools/oauth/{connectionId}/start`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user. Returns the saved setup without issuing agent-bound OAuth state; the human browser initiates provider consent.
@@ -217,8 +185,6 @@ Verification: `passed` — deterministic local fixture; no live provider qualifi
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-runtime-tools-github-credentials`
-
-Capability ID: `connection-setup/post-runtime-tools-github-credentials`.
 
 API: `present` — `POST /runtime-tools/github/credentials`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
@@ -234,8 +200,6 @@ Review: `operation-reviewed`.
 
 ### `get-tools-oauth-cloud-connector-enrollment`
 
-Capability ID: `connection-setup/get-tools-oauth-cloud-connector-enrollment`.
-
 API: `present` — `GET /api/tools/oauth/cloud-connector/enrollment`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -244,8 +208,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-tools-oauth-cloud-connector-enrollment`
-
-Capability ID: `connection-setup/post-tools-oauth-cloud-connector-enrollment`.
 
 API: `present` — `POST /api/tools/oauth/cloud-connector/enrollment`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -256,8 +218,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `get-tools-oauth-cloud-connector-enrollment-callback`
 
-Capability ID: `connection-setup/get-tools-oauth-cloud-connector-enrollment-callback`.
-
 API: `present` — `GET /api/tools/oauth/cloud-connector/enrollment-callback`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -266,8 +226,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-tools-oauth-cloud-connector-callback`
-
-Capability ID: `connection-setup/get-tools-oauth-cloud-connector-callback`.
 
 API: `present` — `GET /api/tools/oauth/cloud-connector/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
@@ -278,8 +236,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `get-tools-oauth-paperclip-id-callback`
 
-Capability ID: `connection-setup/get-tools-oauth-paperclip-id-callback`.
-
 API: `present` — `GET /api/tools/oauth/paperclip-id/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
 Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
@@ -288,8 +244,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-tools-vercel-connect-callback`
-
-Capability ID: `connection-setup/get-tools-vercel-connect-callback`.
 
 API: `present` — `GET /api/tools/vercel-connect/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
@@ -300,8 +254,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `get-tools-oauth-callback`
 
-Capability ID: `connection-setup/get-tools-oauth-callback`.
-
 API: `present` — `GET /api/tools/oauth/callback`; browser/provider/MCP protocol.
 Agent access: `restricted` — browser authentication return.
 Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
@@ -310,8 +262,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-mcp-runtime-tools`
-
-Capability ID: `connection-setup/get-mcp-runtime-tools`.
 
 API: `present` — `GET /mcp/runtime-tools`; browser/provider/MCP protocol.
 Agent access: `available` — existing authenticated MCP/provider protocol; not callable as JSON REST.
@@ -322,8 +272,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-mcp-runtime-tools`
 
-Capability ID: `connection-setup/post-mcp-runtime-tools`.
-
 API: `present` — `POST /mcp/runtime-tools`; browser/provider/MCP protocol.
 Agent access: `available` — existing authenticated MCP/provider protocol; not callable as JSON REST.
 Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
@@ -332,8 +280,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-connection-intents-setup-options`
-
-Capability ID: `connection-setup/get-connection-intents-setup-options`.
 
 API: `present` — `GET /api/connection-intents/{interactionId}/setup-options`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -344,8 +290,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `post-connection-intents-phase`
 
-Capability ID: `connection-setup/post-connection-intents-phase`.
-
 API: `present` — `POST /api/connection-intents/{interactionId}/phase`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -354,8 +298,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-connection-intents-complete`
-
-Capability ID: `connection-setup/post-connection-intents-complete`.
 
 API: `present` — `POST /api/connection-intents/{interactionId}/complete`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -371,8 +313,6 @@ Review: `operation-reviewed`.
 
 ### `post-companies-tools-apps-finalize-oauth-access`
 
-Capability ID: `connection-setup/post-companies-tools-apps-finalize-oauth-access`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/apps/{connectionId}/finalize-oauth-access`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -382,8 +322,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-tools-apps-finish`
 
-Capability ID: `connection-setup/post-companies-tools-apps-finish`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/apps/{connectionId}/finish`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -392,8 +330,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-tool-connections-reconnect`
-
-Capability ID: `connection-setup/post-tool-connections-reconnect`.
 
 API: `present` — `POST /api/tool-connections/{connectionId}/reconnect`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -409,8 +345,6 @@ Review: `operation-reviewed`.
 
 ### `post-runtime-tools-connections-request`
 
-Capability ID: `connection-setup/post-runtime-tools-connections-request`.
-
 API: `present` — `POST /runtime-tools/connections/request`; JSON REST.
 Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
 Policy: Existing run-bound tool, scoped credential lease, execution policy, or assigned-email-agent checks; connection-management grants do not bypass these controls.
@@ -419,8 +353,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-connection-intents-decline`
-
-Capability ID: `connection-setup/post-connection-intents-decline`.
 
 API: `present` — `POST /api/connection-intents/{interactionId}/decline`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -436,8 +368,6 @@ Review: `operation-reviewed`.
 
 ### `post-companies-chat-endpoints`
 
-Capability ID: `connection-setup/post-companies-chat-endpoints`.
-
 API: `present` — `POST /api/companies/{companyId}/chat-endpoints`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -451,8 +381,6 @@ Capability ID: `connection-setup/failure`.
 Review: `operation-reviewed`.
 
 ### `post-tool-connections-health-check`
-
-Capability ID: `connection-setup/post-tool-connections-health-check`.
 
 API: `present` — `POST /api/tool-connections/{connectionId}/health-check`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.

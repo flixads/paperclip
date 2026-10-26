@@ -21,8 +21,6 @@ Review: `operation-reviewed`.
 
 ### `get-tool-connections-grants`
 
-Capability ID: `app-permissions/get-tool-connections-grants`.
-
 API: `present` — `GET /api/tool-connections/{connectionId}/grants`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -31,8 +29,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `put-tool-connections-grants-members`
-
-Capability ID: `app-permissions/put-tool-connections-grants-members`.
 
 API: `present` — `PUT /api/tool-connections/{connectionId}/grants/{grantId}/members`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -43,8 +39,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-tool-connections-grants-installations`
 
-Capability ID: `app-permissions/post-tool-connections-grants-installations`.
-
 API: `present` — `POST /api/tool-connections/{connectionId}/grants/installations`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles` and `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -53,8 +47,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `delete-tool-connections-grants`
-
-Capability ID: `app-permissions/delete-tool-connections-grants`.
 
 API: `present` — `DELETE /api/tool-connections/{connectionId}/grants/{grantId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -65,8 +57,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-tool-connections-grants-delegations`
 
-Capability ID: `app-permissions/post-tool-connections-grants-delegations`.
-
 API: `present` — `POST /api/tool-connections/{connectionId}/grants/{grantId}/delegations`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles` and `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -75,8 +65,6 @@ Verification: `passed` — deterministic local fixture; no live provider qualifi
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `delete-tool-connections-grants-delegations`
-
-Capability ID: `app-permissions/delete-tool-connections-grants-delegations`.
 
 API: `present` — `DELETE /api/tool-connections/{connectionId}/grants/{grantId}/delegations/{delegationId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -87,8 +75,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `get-tool-connections-installs`
 
-Capability ID: `app-permissions/get-tool-connections-installs`.
-
 API: `present` — `GET /api/tool-connections/{connectionId}/installs`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -97,8 +83,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `put-tool-connections-installs`
-
-Capability ID: `app-permissions/put-tool-connections-installs`.
 
 API: `present` — `PUT /api/tool-connections/{connectionId}/installs`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -114,8 +98,6 @@ Review: `operation-reviewed`.
 
 ### `get-companies-tools-trust-rules`
 
-Capability ID: `app-permissions/get-companies-tools-trust-rules`.
-
 API: `present` — `GET /api/companies/{companyId}/tools/trust-rules`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -124,8 +106,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-companies-tools-policies`
-
-Capability ID: `app-permissions/get-companies-tools-policies`.
 
 API: `present` — `GET /api/companies/{companyId}/tools/policies`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -136,8 +116,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-tools-policies-reorder`
 
-Capability ID: `app-permissions/post-companies-tools-policies-reorder`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/policies/reorder`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -146,8 +124,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-companies-tools-policies`
-
-Capability ID: `app-permissions/post-companies-tools-policies`.
 
 API: `present` — `POST /api/companies/{companyId}/tools/policies`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -158,8 +134,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-tools-policies-duplicate`
 
-Capability ID: `app-permissions/post-companies-tools-policies-duplicate`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/policies/{policyId}/duplicate`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -168,8 +142,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `patch-companies-tools-policies`
-
-Capability ID: `app-permissions/patch-companies-tools-policies`.
 
 API: `present` — `PATCH /api/companies/{companyId}/tools/policies/{policyId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -180,8 +152,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `delete-companies-tools-policies`
 
-Capability ID: `app-permissions/delete-companies-tools-policies`.
-
 API: `present` — `DELETE /api/companies/{companyId}/tools/policies/{policyId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -191,8 +161,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-tools-trust-rules-revoke`
 
-Capability ID: `app-permissions/post-companies-tools-trust-rules-revoke`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/trust-rules/{policyId}/revoke`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -201,8 +169,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-companies-tools-policy-test`
-
-Capability ID: `app-permissions/post-companies-tools-policy-test`.
 
 API: `present` — `POST /api/companies/{companyId}/tools/policy/test`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -218,8 +184,6 @@ Review: `operation-reviewed`.
 
 ### `post-tool-connections-catalog-refresh`
 
-Capability ID: `app-permissions/post-tool-connections-catalog-refresh`.
-
 API: `present` — `POST /api/tool-connections/{connectionId}/catalog/refresh`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -228,8 +192,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-tool-connections-catalog`
-
-Capability ID: `app-permissions/get-tool-connections-catalog`.
 
 API: `present` — `GET /api/tool-connections/{connectionId}/catalog`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -240,8 +202,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-tool-profiles-new-tools`
 
-Capability ID: `app-permissions/get-tool-profiles-new-tools`.
-
 API: `present` — `GET /api/tool-profiles/{profileId}/new-tools`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_profiles`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -250,8 +210,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-tool-profiles-new-tools-review`
-
-Capability ID: `app-permissions/post-tool-profiles-new-tools-review`.
 
 API: `present` — `POST /api/tool-profiles/{profileId}/new-tools/review`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -267,8 +225,6 @@ Review: `operation-reviewed`.
 
 ### `get-companies-tools-action-requests`
 
-Capability ID: `app-permissions/get-companies-tools-action-requests`.
-
 API: `present` — `GET /api/companies/{companyId}/tools/action-requests`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -277,8 +233,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-tool-connections-test-agents`
-
-Capability ID: `app-permissions/get-tool-connections-test-agents`.
 
 API: `present` — `GET /api/tool-connections/{connectionId}/test-agents`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -289,8 +243,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-tool-connections-test-agents-access`
 
-Capability ID: `app-permissions/get-tool-connections-test-agents-access`.
-
 API: `present` — `GET /api/tool-connections/{connectionId}/test-agents/{agentId}/access`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -299,8 +251,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-tool-connections-test-calls`
-
-Capability ID: `app-permissions/post-tool-connections-test-calls`.
 
 API: `present` — `POST /api/tool-connections/{connectionId}/test-calls`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -311,8 +261,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-tool-connections-test-calls`
 
-Capability ID: `app-permissions/get-tool-connections-test-calls`.
-
 API: `present` — `GET /api/tool-connections/{connectionId}/test-calls/{actionRequestId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -321,8 +269,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-companies-tools-action-requests-trust-rule`
-
-Capability ID: `app-permissions/post-companies-tools-action-requests-trust-rule`.
 
 API: `present` — `POST /api/companies/{companyId}/tools/action-requests/{actionRequestId}/trust-rule`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -333,8 +279,6 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 ### `post-tool-gateway-action-requests-approve`
 
-Capability ID: `app-permissions/post-tool-gateway-action-requests-approve`.
-
 API: `present` — `POST /api/tool-gateway/action-requests/{id}/approve`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
 Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
@@ -343,8 +287,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `post-tool-gateway-action-requests-decline`
-
-Capability ID: `app-permissions/post-tool-gateway-action-requests-decline`.
 
 API: `present` — `POST /api/tool-gateway/action-requests/{id}/decline`; JSON REST.
 Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
@@ -360,8 +302,6 @@ Review: `operation-reviewed`.
 
 ### `get-companies-tools-apps-attention`
 
-Capability ID: `app-permissions/get-companies-tools-apps-attention`.
-
 API: `present` — `GET /api/companies/{companyId}/tools/apps/attention`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -370,8 +310,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-companies-tools-applications`
-
-Capability ID: `app-permissions/get-companies-tools-applications`.
 
 API: `present` — `GET /api/companies/{companyId}/tools/applications`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -382,8 +320,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-companies-tools-applications`
 
-Capability ID: `app-permissions/post-companies-tools-applications`.
-
 API: `present` — `POST /api/companies/{companyId}/tools/applications`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -392,8 +328,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `patch-tool-applications`
-
-Capability ID: `app-permissions/patch-tool-applications`.
 
 API: `present` — `PATCH /api/tool-applications/{applicationId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -404,8 +338,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `delete-tool-applications`
 
-Capability ID: `app-permissions/delete-tool-applications`.
-
 API: `present` — `DELETE /api/tool-applications/{applicationId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -414,8 +346,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-companies-tools-connections`
-
-Capability ID: `app-permissions/get-companies-tools-connections`.
 
 API: `present` — `GET /api/companies/{companyId}/tools/connections`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -426,8 +356,6 @@ Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `get-tool-connections`
 
-Capability ID: `app-permissions/get-tool-connections`.
-
 API: `present` — `GET /api/tool-connections/{connectionId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -436,8 +364,6 @@ Verification: `passed` — deterministic provider fixtures / local assembled ser
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-tool-connections-railway-ssh`
-
-Capability ID: `app-permissions/post-tool-connections-railway-ssh`.
 
 API: `present` — `POST /api/tool-connections/{connectionId}/railway/ssh`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -448,8 +374,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `get-tool-connections-usage`
 
-Capability ID: `app-permissions/get-tool-connections-usage`.
-
 API: `present` — `GET /api/tool-connections/{connectionId}/usage`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -458,8 +382,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-tool-connections-aggregator-apps`
-
-Capability ID: `app-permissions/get-tool-connections-aggregator-apps`.
 
 API: `present` — `GET /api/tool-connections/{connectionId}/aggregator/apps`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -470,8 +392,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-tool-connections-aggregator-apps-sync`
 
-Capability ID: `app-permissions/post-tool-connections-aggregator-apps-sync`.
-
 API: `present` — `POST /api/tool-connections/{connectionId}/aggregator/apps/sync`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -480,8 +400,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-tool-connections-aggregator-apps-refresh`
-
-Capability ID: `app-permissions/post-tool-connections-aggregator-apps-refresh`.
 
 API: `present` — `POST /api/tool-connections/{connectionId}/aggregator/apps/refresh`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -492,8 +410,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `put-tool-connections-aggregator-discovery`
 
-Capability ID: `app-permissions/put-tool-connections-aggregator-discovery`.
-
 API: `present` — `PUT /api/tool-connections/{connectionId}/aggregator/discovery`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -502,8 +418,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-tool-connections-composio-apps`
-
-Capability ID: `app-permissions/get-tool-connections-composio-apps`.
 
 API: `present` — `GET /api/tool-connections/{connectionId}/composio/apps`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -514,8 +428,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-tool-connections-composio-apps-sync`
 
-Capability ID: `app-permissions/post-tool-connections-composio-apps-sync`.
-
 API: `present` — `POST /api/tool-connections/{connectionId}/composio/apps/sync`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -524,8 +436,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-tool-connections-composio-apps-refresh`
-
-Capability ID: `app-permissions/post-tool-connections-composio-apps-refresh`.
 
 API: `present` — `POST /api/tool-connections/{connectionId}/composio/apps/refresh`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -536,8 +446,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-tool-connections-composio-apps-accounts`
 
-Capability ID: `app-permissions/post-tool-connections-composio-apps-accounts`.
-
 API: `present` — `POST /api/tool-connections/{connectionId}/composio/apps/{toolkit}/accounts`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -546,8 +454,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `post-tool-connections-composio-apps-setup`
-
-Capability ID: `app-permissions/post-tool-connections-composio-apps-setup`.
 
 API: `present` — `POST /api/tool-connections/{connectionId}/composio/apps/{toolkit}/setup`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -558,8 +464,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `patch-tool-connections`
 
-Capability ID: `app-permissions/patch-tool-connections`.
-
 API: `present` — `PATCH /api/tool-connections/{connectionId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -568,8 +472,6 @@ Verification: `passed` — deterministic provider fixtures / local assembled ser
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `delete-tool-connections`
-
-Capability ID: `app-permissions/delete-tool-connections`.
 
 API: `present` — `DELETE /api/tool-connections/{connectionId}`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
@@ -580,8 +482,6 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 ### `post-tool-connections-health-check`
 
-Capability ID: `app-permissions/post-tool-connections-health-check`.
-
 API: `present` — `POST /api/tool-connections/{connectionId}/health-check`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
@@ -590,8 +490,6 @@ Verification: `not-run` — individual operation not executed in this audit; sha
 Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ### `get-tool-connections-activity`
-
-Capability ID: `app-permissions/get-tool-connections-activity`.
 
 API: `present` — `GET /api/tool-connections/{connectionId}/activity`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
