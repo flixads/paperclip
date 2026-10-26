@@ -79,3 +79,18 @@ Scope: ui
 Storybook: Mount current TokensPanel with issue controls, once-only token reveal, expiry/actions, revocation confirmation and failures. Old GatewaysTab fixtures and assistant OAuth revocation are insufficient.
 Production: Issue bounded token via POST /tool-gateway/gateways/{id}/tokens; call allowed and excluded tools; revoke via /tool-gateway/gateway-tokens/{id}/revoke and verify denial using same client.
 Sources: Source: [TokensPanel.tsx](../../ui/src/pages/apps/gateways/panels/TokensPanel.tsx), [tool-gateway.ts](../../server/src/routes/tool-gateway.ts), [tools.ts](../../ui/src/api/tools.ts). Tests: [TokensPanel.test.tsx](../../ui/src/pages/apps/gateways/panels/TokensPanel.test.tsx), [tool-gateway-service.test.ts](../../server/src/__tests__/tool-gateway-service.test.ts), [tool-gateway.test.ts](../../server/src/__tests__/tool-gateway.test.ts)
+### `delegated-configuration`
+
+A fresh standard agent can use the existing REST API and default native
+`search_api` / `call_api` to perform requested configuration within its responsible
+user's authority. Personal ownership stays with that user; audit attribution stays
+with the acting agent. Existing agents retain their explicit grants and restrictions.
+Human authentication and identity confirmation open the exact saved setup; local
+host administration and action approval retain their own boundaries. See the
+operation inventory in the companion and the [qualification record](../../doc/plans/2026-10-13-connection-api-parity.md).
+
+Automated: [agent-authenticated integration](../../server/src/__tests__/connection-management.integration.test.ts)
+uses normal creation defaults, persistent agent keys, run JWTs, native tool bindings,
+real database persistence, and deterministic provider fixtures. It separately checks
+user/agent revocation, trust, company/ownership scope, work modes and attribution.
+This is API reachability evidence, not a live provider setup or an LLM success rate.

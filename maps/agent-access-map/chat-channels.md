@@ -1,287 +1,875 @@
 # External chat and email conversations — agent access
 
-Product map: [External chat and email conversations](../feature-map/chat-channels.md).
+Product map: [chat-channels](../feature-map/chat-channels.md).
 
 Feature ID: `chat-channels`.
 
-Review date: 2026-10-12. Source commit: `58e16dbddfc9c8d0cf60867f9d9847f0feda055b`.
-Native REST transport reconciled in this change; see the
-[shared transport contract](README.md#native-rest-transport).
+Review date: 2026-10-26. Source base: `a1f77821b9cd5c9c846fdf7a0fa5cc620ad2b6bb`; implementation: [#17737](https://github.com/paperclipai/paperclip/pull/17737).
 
-This is a source-reviewed baseline of representative operations and known gaps.
-Each capability needs operation-level review before its entire scope can be
-qualified. No live agent execution is claimed. Follow the [map contract](../README.md)
-for format, permission checks, evidence and maintenance.
+Connection operations reviewed in this working tree. The inventory was reconciled
+against production UI clients, REST registrations and service entry points; it is
+a review checklist, not a runtime registry. [Authorization and evidence contract](../../doc/plans/2026-10-13-connection-api-parity.md).
+Fixture evidence is separate from live provider qualification and from empirical
+LLM success. Source-only entries have a reviewed agent path or an explicit boundary,
+but do not claim an individually executed HTTP test.
 
 ## `providers`
 
 Capability ID: `chat-channels/providers`.
 
-Review: `baseline`.
+Review: `operation-reviewed`.
 
-API: `present` — representative operation IDs:
+### `get-companies-chat-endpoints`
 
-- `POST /api/companies/{companyId}/chat-endpoints`.
+Capability ID: `chat-channels/get-companies-chat-endpoints`.
 
-Agent access: `restricted` — Board setup APIs; native connection request can ask for
-setup.
+API: `present` — `GET /api/companies/{companyId}/chat-endpoints`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-Policy: Endpoint management/identity linking requires a board user; delivery is
-server-owned and agent tools use scoped assignments.
+### `post-companies-chat-endpoints`
 
-Evidence: `source-only` — [implementation](../../server/src/routes/chat-channels.ts#L75)
-at the reviewed commit above.
+Capability ID: `chat-channels/post-companies-chat-endpoints`.
 
-Verification: `not-run` — assert the documented agent denial with an owned test fixture;
-verify any listed agent request/result path separately. A delegated operation needs its
-own policy and access review.
+API: `present` — `POST /api/companies/{companyId}/chat-endpoints`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
 
-Gaps: Provider installation and account enrollment are not available to an ordinary
-agent actor.
+### `get-chat-endpoints`
 
-Speko UI reconciliation (2026-10-13): experimental voice setup uses the same
-board-managed endpoint boundary. Source review follows the merged voice runtime
-and the UI integration; live provider qualification is still separate.
+Capability ID: `chat-channels/get-chat-endpoints`.
 
+API: `present` — `GET /api/chat-endpoints/{endpointId}`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `get-companies-chat-slack-setup-options`
+
+Capability ID: `chat-channels/get-companies-chat-slack-setup-options`.
+
+API: `present` — `GET /api/companies/{companyId}/chat-slack/setup-options`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-slack-managed-authorize`
+
+Capability ID: `chat-channels/post-chat-endpoints-slack-managed-authorize`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/managed/authorize`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-slack-managed-provision`
+
+Capability ID: `chat-channels/post-chat-endpoints-slack-managed-provision`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/managed/provision`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `delete-companies-chat-slack-manager-grants`
+
+Capability ID: `chat-channels/delete-companies-chat-slack-manager-grants`.
+
+API: `present` — `DELETE /api/companies/{companyId}/chat-slack/manager-grants/{grantId}`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-chat-slack-managed-oauth-callback`
+
+Capability ID: `chat-channels/get-chat-slack-managed-oauth-callback`.
+
+API: `present` — `GET /api/chat-slack/managed/oauth/callback`; browser/provider/MCP protocol.
+Agent access: `restricted` — browser authentication return.
+Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `post-chat-endpoints-slack-registration`
+
+Capability ID: `chat-channels/post-chat-endpoints-slack-registration`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/registration`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-slack-install`
+
+Capability ID: `chat-channels/post-chat-endpoints-slack-install`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/install`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-chat-slack-oauth-callback`
+
+Capability ID: `chat-channels/get-chat-slack-oauth-callback`.
+
+API: `present` — `GET /api/chat-slack/oauth/callback`; browser/provider/MCP protocol.
+Agent access: `restricted` — browser authentication return.
+Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `get-chat-endpoints-github-configuration`
+
+Capability ID: `chat-channels/get-chat-endpoints-github-configuration`.
+
+API: `present` — `GET /api/chat-endpoints/{endpointId}/github/configuration`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `put-chat-endpoints-github-configuration`
+
+Capability ID: `chat-channels/put-chat-endpoints-github-configuration`.
+
+API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/configuration`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-chat-endpoints-github-verify`
+
+Capability ID: `chat-channels/post-chat-endpoints-github-verify`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/verify`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `put-chat-endpoints-github-progress`
+
+Capability ID: `chat-channels/put-chat-endpoints-github-progress`.
+
+API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/progress`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-chat-endpoints-github-personal-connections`
+
+Capability ID: `chat-channels/get-chat-endpoints-github-personal-connections`.
+
+API: `present` — `GET /api/chat-endpoints/{endpointId}/github/personal-connections`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-github-people-lookup`
+
+Capability ID: `chat-channels/post-chat-endpoints-github-people-lookup`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/people/lookup`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-github-registration`
+
+Capability ID: `chat-channels/post-chat-endpoints-github-registration`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/registration`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-chat-endpoints-github-registration-restart`
+
+Capability ID: `chat-channels/post-chat-endpoints-github-registration-restart`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/registration/restart`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `put-chat-endpoints-github-draft`
+
+Capability ID: `chat-channels/put-chat-endpoints-github-draft`.
+
+API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/draft`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-github-setup`
+
+Capability ID: `chat-channels/post-chat-endpoints-github-setup`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/setup`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-github-app`
+
+Capability ID: `chat-channels/post-chat-endpoints-github-app`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/app`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-chat-endpoints-github-repositories-refresh`
+
+Capability ID: `chat-channels/post-chat-endpoints-github-repositories-refresh`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/repositories/refresh`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `get-chat-endpoints-github-repositories`
+
+Capability ID: `chat-channels/get-chat-endpoints-github-repositories`.
+
+API: `present` — `GET /api/chat-endpoints/{endpointId}/github/repositories`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `put-chat-endpoints-github-repositories-access`
+
+Capability ID: `chat-channels/put-chat-endpoints-github-repositories-access`.
+
+API: `present` — `PUT /api/chat-endpoints/{endpointId}/github/repositories/access`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `patch-chat-endpoints`
+
+Capability ID: `chat-channels/patch-chat-endpoints`.
+
+API: `present` — `PATCH /api/chat-endpoints/{endpointId}`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-chat-endpoints-photon-inspect`
+
+Capability ID: `chat-channels/post-chat-endpoints-photon-inspect`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/photon/inspect`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-setup`
+
+Capability ID: `chat-channels/post-chat-endpoints-setup`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/setup`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-chat-endpoints-setup-secret`
+
+Capability ID: `chat-channels/post-chat-endpoints-setup-secret`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/setup-secret`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-chat-endpoints-resources`
+
+Capability ID: `chat-channels/get-chat-endpoints-resources`.
+
+API: `present` — `GET /api/chat-endpoints/{endpointId}/resources`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `put-chat-endpoints-resources`
+
+Capability ID: `chat-channels/put-chat-endpoints-resources`.
+
+API: `present` — `PUT /api/chat-endpoints/{endpointId}/resources`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-companies-email-connections`
+
+Capability ID: `chat-channels/get-companies-email-connections`.
+
+API: `present` — `GET /api/companies/{companyId}/email/connections`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-companies-email-connections`
+
+Capability ID: `chat-channels/post-companies-email-connections`.
+
+API: `present` — `POST /api/companies/{companyId}/email/connections`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
+
+### `post-companies-email-connections-inspect`
+
+Capability ID: `chat-channels/post-companies-email-connections-inspect`.
+
+API: `present` — `POST /api/companies/{companyId}/email/connections/{connectionId}/inspect`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-companies-email-connections-check-address`
+
+Capability ID: `chat-channels/post-companies-email-connections-check-address`.
+
+API: `present` — `POST /api/companies/{companyId}/email/connections/{connectionId}/check-address`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-companies-email-inboxes`
+
+Capability ID: `chat-channels/get-companies-email-inboxes`.
+
+API: `present` — `GET /api/companies/{companyId}/email/inboxes`; JSON REST.
+Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
+Policy: Existing run-bound tool, scoped credential lease, execution policy, or assigned-email-agent checks; connection-management grants do not bypass these controls.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-companies-email-inspect`
+
+Capability ID: `chat-channels/post-companies-email-inspect`.
+
+API: `present` — `POST /api/companies/{companyId}/email/inspect`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-companies-email-inboxes`
+
+Capability ID: `chat-channels/post-companies-email-inboxes`.
+
+API: `present` — `POST /api/companies/{companyId}/email/inboxes`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-companies-email-deliveries`
+
+Capability ID: `chat-channels/get-companies-email-deliveries`.
+
+API: `present` — `GET /api/companies/{companyId}/email/deliveries/{publicationId}`; JSON REST.
+Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
+Policy: Existing run-bound tool, scoped credential lease, execution policy, or assigned-email-agent checks; connection-management grants do not bypass these controls.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 ## `identity`
 
 Capability ID: `chat-channels/identity`.
 
-Review: `baseline`.
+Review: `operation-reviewed`.
 
-API: `present` — representative operation IDs:
+### `post-chat-endpoints-github-identity`
 
-- `POST /api/chat-identity-links/confirm`.
+Capability ID: `chat-channels/post-chat-endpoints-github-identity`.
 
-Agent access: `restricted` — Human identity-link flow.
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/identity`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
-Policy: Endpoint management/identity linking requires a board user; delivery is
-server-owned and agent tools use scoped assignments.
+### `post-chat-endpoints-github-identity-start`
 
-Evidence: `source-only` — [implementation](../../server/src/routes/chat-channels.ts#L75)
-at the reviewed commit above.
+Capability ID: `chat-channels/post-chat-endpoints-github-identity-start`.
 
-Verification: `not-run` — assert the documented agent denial with an owned test fixture;
-verify any listed agent request/result path separately. A delegated operation needs its
-own policy and access review.
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/identity/start`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
 
-Gaps: Identity linking requires a signed-in board user, rollout admission and
-provider checks at the HTTP route. Native `call_api` preserves these permissions.
+### `post-chat-endpoints-github-identity-confirm`
 
+Capability ID: `chat-channels/post-chat-endpoints-github-identity-confirm`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/github/identity/confirm`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `get-chat-endpoints-principals`
+
+Capability ID: `chat-channels/get-chat-endpoints-principals`.
+
+API: `present` — `GET /api/chat-endpoints/{endpointId}/principals`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-principals-link-intent`
+
+Capability ID: `chat-channels/post-chat-endpoints-principals-link-intent`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/principals/{principalId}/link-intent`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `delete-chat-endpoints-principals-link`
+
+Capability ID: `chat-channels/delete-chat-endpoints-principals-link`.
+
+API: `present` — `DELETE /api/chat-endpoints/{endpointId}/principals/{principalId}/link`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-identity-links-confirm`
+
+Capability ID: `chat-channels/post-chat-identity-links-confirm`.
+
+API: `present` — `POST /api/chat-identity-links/confirm`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `post-chat-identity-links-request-access`
+
+Capability ID: `chat-channels/post-chat-identity-links-request-access`.
+
+API: `present` — `POST /api/chat-identity-links/request-access`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `get-chat-identity-links-preview`
+
+Capability ID: `chat-channels/get-chat-identity-links-preview`.
+
+API: `present` — `GET /api/chat-identity-links/preview`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `get-api-chat-github-manifest-callback`
+
+Capability ID: `chat-channels/get-api-chat-github-manifest-callback`.
+
+API: `present` — `GET /api/chat-github/manifest/callback`; browser/provider/MCP protocol.
+Agent access: `restricted` — browser authentication return.
+Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Evidence: `source-only` — [route](../../server/src/app.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `get-api-chat-github-cloud-callback`
+
+Capability ID: `chat-channels/get-api-chat-github-cloud-callback`.
+
+API: `present` — `GET /api/chat-github/cloud/callback`; browser/provider/MCP protocol.
+Agent access: `restricted` — browser authentication return.
+Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Evidence: `source-only` — [route](../../server/src/app.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `get-api-chat-github-identity-callback`
+
+Capability ID: `chat-channels/get-api-chat-github-identity-callback`.
+
+API: `present` — `GET /api/chat-github/identity/callback`; browser/provider/MCP protocol.
+Agent access: `restricted` — browser authentication return.
+Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Evidence: `verified` — [route](../../server/src/app.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 ## `conversation`
 
 Capability ID: `chat-channels/conversation`.
 
-Review: `baseline`.
+Review: `operation-reviewed`.
 
-API: `present` — representative operation IDs:
+### `get-chat-endpoints-github-review-detail`
 
-- `POST /api/chat-endpoints/{endpointId}/conversations/{conversationId}/publications`.
+Capability ID: `chat-channels/get-chat-endpoints-github-review-detail`.
 
-Agent access: `partial` — Assigned-agent reply pipeline; native completion; provider
-tools where assigned.
+API: `present` — `GET /api/chat-endpoints/{endpointId}/github/reviews/{reviewId}`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-Policy: Endpoint management/identity linking requires a board user; delivery is
-server-owned and agent tools use scoped assignments.
+### `get-chat-endpoints-github-reviews`
 
-Evidence: `source-only` — [implementation](../../server/src/routes/chat-channels.ts#L75)
-at the reviewed commit above.
+Capability ID: `chat-channels/get-chat-endpoints-github-reviews`.
 
-Verification: `not-run` — exercise a listed permitted operation with actual agent
-credentials/run context; inspect its result and applicable persistence/attribution.
-Assert the relevant denied actor, owner, company or mode from Policy. Review the
-remaining operations before qualifying the whole capability.
+API: `present` — `GET /api/chat-endpoints/{endpointId}/github/reviews`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-Gaps: Normal agent replies work through server delivery. Explicit endpoint publication
-APIs are board management paths.
+### `get-chat-endpoints-conversations`
 
-Monitor publication lineage uses the admitted wake and its source run's matching
-`set_task_monitor` receipt, including company, task, immutable agent, requester,
-and scheduled time. A source ID in context cannot grant publication. The normal
-delivery worker rechecks current endpoint and sender authority. Database fixtures
-exercise lineage and finalization recovery; live Slack qualification remains
-separate.
+Capability ID: `chat-channels/get-chat-endpoints-conversations`.
 
-Publication, provider-reply, and form-open 403/permission errors fail the rejected
-operation without removing unrelated assigned channel tools. Confirmed
-authentication failures still put the endpoint in attention, which blocks tool
-admission and provider sends; connection enabled intent is retained. Known
-resource denials and explicit revocation keep their narrower or installation-wide
-stops. PostgreSQL provider fixtures verify discovery after 403 and rejection after
-401, including signed installation removal after a 401; they do not establish
-live GitHub credential recovery.
+API: `present` — `GET /api/chat-endpoints/{endpointId}/conversations`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-GitHub publication recovery (2026-10-14): assigned-agent `submit_review`, `comment`,
-and `update_comment` calls reuse their run-, task-, endpoint-, and argument-bound
-publication on an exact retry. Identity uses the complete durable request rather
-than the shortened audit preview. A changed suffix, changed nested entry, or
-missing publication cannot authorize another write. Exact retries only read the
-receipt; the worker owns pending provider retries. Fresh gateway policy and provider authority remain
-required. The durable worker resumes transient failures after restart and stops
-at its retry cap, revoked authority, or a superseded head. A pending receipt is
-not task completion. Source:
-[publication service](../../server/src/services/chat-github-reviews.ts) and
-[gateway](../../server/src/services/tool-gateway.ts). Verification uses
-PostgreSQL-backed provider fixtures; this entry does not claim live provider
-qualification for the new retry path.
+### `post-chat-endpoints-conversations-publications`
 
-GitHub main-response identity (2026-10-19): PR requests share a company-, App-,
-repository- and PR-bound comment. Agents still supply no comment destination.
-Current sender, assignee, repository and publication authority are checked before
-edits, including maintenance failure notices. Leading mentions for another
-recipient are filtered before task work; explicit mentions of this bot still
-follow normal access checks. Provider-fixture coverage is not live GitHub proof.
-Native terminal reconciliation resolves the accepted run identity through the
-existing chat provenance resolver; an older run's reply cannot complete a newer
-request merely because both requests share the same PR comment.
+Capability ID: `chat-channels/post-chat-endpoints-conversations-publications`.
 
-Speko browser sessions use `POST /api/companies/{companyId}/voice-sessions`,
-with GET inspection/notification and POST `/{sessionId}/end` operations below
-that collection. These routes require board identity; ordinary agent credentials
-cannot start a private voice session. Start and notification also require the
-experimental chat-connectors gate. Signed provider callbacks use the separate
-voice-webhook routes and their session capability. Evidence: `source-only` —
-[voice routes](../../server/src/routes/voice-sessions.ts). No live browser answer
-retrieval or telephone playback is established by the UI fixtures.
+API: `present` — `POST /api/chat-endpoints/{endpointId}/conversations/{conversationId}/publications`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
-Slack's **Require at-mention** policy applies to channel messages and channel
-thread replies, including queued work. DMs are exempt from mention checks;
-endpoint availability, **Allow direct messages**, and sender authorization still
-apply. Top-level DM replies retain their linear conversation destination. Source:
-[admission](../../server/src/services/chat-channels.ts) and
-[queued run policy](../../server/src/services/durable-chat-wakeup.ts). Live Slack
-verification of this exemption remains separate from provider-fixture coverage.
+### `get-chat-endpoints-conversations-publications-status`
 
-Slack eyes acknowledge the authorized task/comment commit before attachment
-preparation or scheduler acceptance. This server-owned receipt grants no agent
-authority. Generation/credential fencing, durable retries and exact-source final
-cleanup still apply. PostgreSQL fixtures block attachments, subscription and
-wakeup independently to verify that none gates the reaction; live Slack latency
-remains a separate check. See [receipt worker](../../server/src/services/chat-channels/receipt-reactions.ts).
+Capability ID: `chat-channels/get-chat-endpoints-conversations-publications-status`.
 
-Controller-owned receipt reactions accept the SDK's empty thread timestamp for
-linear DMs. Channel IDs and source message timestamps remain validated. This
-does not add an agent tool or change sender, task, or credential authorization.
-The pinned SDK transport regression is covered in
-[receipt tests](../../server/src/services/chat-slack-receipts.test.ts); live
-acknowledgement speed needs a separate provider test.
+API: `present` — `GET /api/chat-endpoints/{endpointId}/conversations/{conversationId}/publications/{publicationId}/status`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-Slack assignment and tool discovery bound concurrent endpoint preparation to
-two. Every endpoint keeps the live task, company, agent and linked-user checks;
-403 denials omit only that endpoint. Preparation waits for both active checks
-before it returns an ordered result or propagates an error. Tool authority reads
-the current bot token without resolving unrelated webhook credentials. See the
-[real-database preparation controls](../../server/src/__tests__/slack-tool-preparation.test.ts)
-and [batch failure controls](../../server/src/services/connectors/slack-endpoint-preparation.test.ts).
-These local controls do not establish live Slack latency or provider access.
+### `get-issues-chat-binding`
 
-Native tool gateways use the durable run task binding for discovery and policy
-checks, with legacy JSON task fields as a fallback. GitHub and Slack follow
-accepted request provenance across task continuations. GitHub can retain the
-originating conversation after a board follow-up from the same accepted user.
-An inherited origin cannot cross a task, agent, company, or requester boundary.
-Cycle checks reject invalid history without a fixed limit on valid continuations.
-Endpoint settings, linked identity, tool profiles, and invocation policy still
-apply on each call. The native tool contract rotates older provider sessions so
-an empty retained catalog is not reused. PostgreSQL fixtures cover discovery,
-review publication, Slack reads, and revocation in
-[channel integration](../../server/src/__tests__/chat-channels.integration.test.ts)
-and [provenance controls](../../server/src/services/chat-channels/run-origin.test.ts).
-The [voice gateway fixture](../../server/src/__tests__/voice-session-store.integration.test.ts)
-also verifies durable task binding for a later personal callback invocation.
-Failure replies cannot replace final answers inherited from an earlier run.
-These fixtures do not prove live provider delivery.
+Capability ID: `chat-channels/get-issues-chat-binding`.
 
-Catalog authorization projection (2026-10-17): tool discovery uses the same live
-service-owned task, company, agent, requester, endpoint and credential checks as
-full authority resolution. It omits the revision digest and search-action token,
-which catalog descriptors do not consume. Connector assignments and governed
-operations retain full revision resolution; invocation policy is still checked
-by the gateway. Registry replacement and missing-service controls are in
-[authority registration tests](../../server/src/services/connectors/slack-authority.test.ts).
-This is a source and local-database contract; hosted latency needs live evidence.
+API: `present` — `GET /api/issues/{issueId}/chat-binding`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`, responsible-user ceiling, task privacy, endpoint resource scope and target-agent visibility.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-New conversations resolve typed project/workspace defaults from their endpoint
-and destination under the task-creation transaction. Defaults do not authorize
-private sources: admission checks the linked user's authority and assigned agent.
-An existing conversation keeps its task binding. See
-[creation service](../../server/src/services/chat-channels.ts) and
-[defaults contract](../../packages/shared/src/types/chat-channels.ts).
+### `post-api-chat-webhooks`
 
+Capability ID: `chat-channels/post-api-chat-webhooks`.
+
+API: `present` — `POST /api/chat-webhooks/{publicId}/{provider}`; provider webhook ingress.
+Agent access: `not-applicable` — provider-signed inbound events; agent keys and gateway tokens cannot authenticate this route.
+Policy: The provider verifies the payload signature and binds the endpoint/company. The request has no agent principal.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Provider ingress has no agent invocation path. Provider signature validation remains required.
+
+### `post-companies-email-send`
+
+Capability ID: `chat-channels/post-companies-email-send`.
+
+API: `present` — `POST /api/companies/{companyId}/email/send`; JSON REST.
+Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
+Policy: Existing run-bound tool, scoped credential lease, execution policy, or assigned-email-agent checks; connection-management grants do not bypass these controls.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-companies-email-tasks`
+
+Capability ID: `chat-channels/get-companies-email-tasks`.
+
+API: `present` — `GET /api/companies/{companyId}/email/tasks/{issueId}`; JSON REST.
+Agent access: `available` — existing REST/native runtime tool or scoped gateway client, as documented by the linked route.
+Policy: Existing run-bound tool, scoped credential lease, execution policy, or assigned-email-agent checks; connection-management grants do not bypass these controls.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-api-chat-webhooks-agentmail`
+
+Capability ID: `chat-channels/post-api-chat-webhooks-agentmail`.
+
+API: `present` — `POST /api/chat-webhooks/agentmail/{publicId}`; provider webhook ingress.
+Agent access: `not-applicable` — provider-signed inbound events; agent keys and gateway tokens cannot authenticate this route.
+Policy: The provider verifies the payload signature and binds the endpoint/company. The request has no agent principal.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Provider ingress has no agent invocation path. Provider signature validation remains required.
 ## `attachments`
 
 Capability ID: `chat-channels/attachments`.
 
-Review: `baseline`.
+Review: `operation-reviewed`.
 
-API: `present` — representative operation IDs:
+### `get-issues-attachments`
 
-- `GET /api/issues/{id}/attachments`.
-- `POST /api/companies/{companyId}/issues/{issueId}/attachments`.
+API: `present` — `GET /api/issues/{id}/attachments`; JSON REST.
+Agent access: `available` — agent REST and native `search_api` / `call_api` for the attachment list.
+Policy: Current company membership and task read/privacy authority. Connection management grants do not replace task access.
+Evidence: `source-only` — [asset routes](../../server/src/routes/assets.ts).
+Verification: `not-run` — list attachments with actual agent authentication and deny a foreign or private task.
+Gaps: This operation has source review, not current-head HTTP verification.
 
-Agent access: `partial` — Native register_deliverable / attachment tools when admitted;
-agent REST; server-owned delivery.
+### `post-companies-issues-attachments`
 
-Policy: Endpoint management/identity linking requires a board user; delivery is
-server-owned and agent tools use scoped assignments.
+API: `present` — `POST /api/companies/{companyId}/issues/{issueId}/attachments`; multipart upload.
+Agent access: `partial` — agent REST upload; native attachment tools and `register_deliverable` use their admitted resource paths and server-owned chat delivery. JSON-only `call_api` does not upload multipart content.
+Policy: Task mutation/privacy authority, company/resource bounds, storage limits, and admitted native tool scope. Server-owned delivery does not grant endpoint administration.
+Evidence: `source-only` — [asset routes](../../server/src/routes/assets.ts) and [native authority](../../server/src/services/native-runtime/paperclip-runner-tool-authority.ts).
+Verification: `not-run` — upload through an admitted agent path, inspect the stored task attachment and outbound delivery, and deny a foreign task.
+Gaps: Multipart upload is not a JSON native API call. Live chat file delivery remains unqualified by this connection setup audit.
 
-Evidence: `source-only` — [implementation](../../server/src/routes/chat-channels.ts#L75)
-at the reviewed commit above.
+### `post-chat-endpoints-publications-replay`
 
-Verification: `not-run` — exercise a listed permitted operation with actual agent
-credentials/run context; inspect its result and applicable persistence/attribution.
-Assert the relevant denied actor, owner, company or mode from Policy. Review the
-remaining operations before qualifying the whole capability.
+Capability ID: `chat-channels/post-chat-endpoints-publications-replay`.
 
-Gaps: Uploading/registering is supported. Provider delivery status and board replay are
-separate operations.
+API: `present` — `POST /api/chat-endpoints/{endpointId}/publications/{publicationId}/replay`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
+### `post-chat-endpoints-publications-resolve`
+
+Capability ID: `chat-channels/post-chat-endpoints-publications-resolve`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/publications/{publicationId}/resolve`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `post-chat-endpoints-actions-resolve`
+
+Capability ID: `chat-channels/post-chat-endpoints-actions-resolve`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/actions/{actionId}/resolve`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `post-companies-email-deliveries-resolve`
+
+Capability ID: `chat-channels/post-companies-email-deliveries-resolve`.
+
+API: `present` — `POST /api/companies/{companyId}/email/deliveries/{publicationId}/resolve`; JSON REST.
+Agent access: `restricted` — human connection manager records the outcome of an uncertain external delivery. Agents use normal governed send/status operations.
+Policy: Existing run-bound tool, scoped credential lease, execution policy, or assigned-email-agent checks; connection-management grants do not bypass these controls.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 ## `lifecycle`
 
 Capability ID: `chat-channels/lifecycle`.
 
-Review: `baseline`.
+Review: `operation-reviewed`.
 
-API: `present` — representative operation IDs:
+### `post-chat-endpoints-slack-test-message`
 
-- `GET /api/chat-endpoints/{endpointId}/activity`.
-- `PATCH /api/chat-endpoints/{endpointId}`.
-- `PUT /api/chat-endpoints/{endpointId}/resources` configures destination defaults.
+Capability ID: `chat-channels/post-chat-endpoints-slack-test-message`.
 
-Agent access: `restricted` — Board lifecycle APIs; agent requests repair when blocked.
+API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/test-message`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
+Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
 
-Policy: Endpoint management/identity linking requires a board user; delivery is
-server-owned and agent tools use scoped assignments.
+### `post-chat-endpoints-slack-resume`
 
-Evidence: `source-only` — [implementation](../../server/src/routes/chat-channels.ts#L75)
-at the reviewed commit above.
+Capability ID: `chat-channels/post-chat-endpoints-slack-resume`.
 
-Verification: `not-run` — assert the documented agent denial with an owned test fixture;
-verify any listed agent request/result path separately. A delegated operation needs its
-own policy and access review.
+API: `present` — `POST /api/chat-endpoints/{endpointId}/slack/resume`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-Gaps: Activity/repair/replay/disable use board endpoint access, not the agent's ability
-to reply.
+### `post-chat-endpoints-test`
 
-Endpoint/destination execution defaults use the same board-only management
-boundary. Agents select an authorized workspace for their current task through
-the [workspace APIs](workspaces.md), rather than editing channel configuration.
+Capability ID: `chat-channels/post-chat-endpoints-test`.
 
-Speko callback preferences, incoming phone configuration/approval, and call
-history use the company-scoped `voice-callbacks`, `voice-phone`, and
-`voice-history` routes. Their UI controls do not grant agents board authority.
-See [voice routes](../../server/src/routes/voice-sessions.ts); service-level
-caller/session permissions and real provider delivery need separate verification.
+API: `present` — `POST /api/chat-endpoints/{endpointId}/test`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
-GitHub review summary headings use the bot display name. Checks remain
-independently scoped by GitHub App and endpoint/PR/commit identity.
+### `post-chat-endpoints-finish`
 
-After publishing a review, native agents can report `yielded` with
-`response_wake` and no attention requests. Current conversation authorization
-is checked again at commit. The task remains in review without a human card;
-real human dependencies retain the ordinary attention-request path. A timed
-wait requires a confirmed `set_task_monitor` schedule. Database coverage lives
-in `external-chat-wait.integration.test.ts`; this is not live model evidence.
+Capability ID: `chat-channels/post-chat-endpoints-finish`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/finish`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-chat-endpoints-test-status`
+
+Capability ID: `chat-channels/get-chat-endpoints-test-status`.
+
+API: `present` — `GET /api/chat-endpoints/{endpointId}/test-status`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `get-chat-endpoints-activity`
+
+Capability ID: `chat-channels/get-chat-endpoints-activity`.
+
+API: `present` — `GET /api/chat-endpoints/{endpointId}/activity`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:view_audit`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-chat-endpoints-deliveries-replay`
+
+Capability ID: `chat-channels/post-chat-endpoints-deliveries-replay`.
+
+API: `present` — `POST /api/chat-endpoints/{endpointId}/deliveries/{deliveryId}/replay`; JSON REST.
+Agent access: `restricted` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
+Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
+
+### `post-email-inboxes-control`
+
+Capability ID: `chat-channels/post-email-inboxes-control`.
+
+API: `present` — `POST /api/email/inboxes/{endpointId}/control`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+
+### `post-email-inboxes-reconnect`
+
+Capability ID: `chat-channels/post-email-inboxes-reconnect`.
+
+API: `present` — `POST /api/email/inboxes/{endpointId}/reconnect`; JSON REST.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Evidence: `source-only` — [route](../../server/src/routes/email.ts); reviewed in the working tree based on the source commit above.
+Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
+Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
 
 ## `outbound-email`
 

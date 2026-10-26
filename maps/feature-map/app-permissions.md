@@ -107,3 +107,18 @@ Scope: ui
 Storybook: Mount PermissionsPanel/AppDetail with quarantined actions, selection/review, refresh pending, empty and failed discovery states. Existing auto-allowed NewToolsAllowed examples are not quarantine review.
 Production: Exercise catalog refresh and new-tool review with permitted/denied actors; unreviewed actions stay quarantined, prior Off/Ask choices survive refresh, and approved review persists.
 Sources: Source: [PermissionsPanel.tsx](../../ui/src/pages/apps/app-detail/PermissionsPanel.tsx), [AppDetail.tsx](../../ui/src/pages/apps/AppDetail.tsx), [tool-access.ts](../../server/src/routes/tool-access.ts). Tests: [AppDetail.test.tsx](../../ui/src/pages/apps/AppDetail.test.tsx), [tool-access-service.test.ts](../../server/src/__tests__/tool-access-service.test.ts), [tool-access-policy-service.test.ts](../../server/src/__tests__/tool-access-policy-service.test.ts)
+### `delegated-configuration`
+
+A fresh standard agent can use the existing REST API and default native
+`search_api` / `call_api` to perform requested configuration within its responsible
+user's authority. Personal ownership stays with that user; audit attribution stays
+with the acting agent. Existing agents retain their explicit grants and restrictions.
+Human authentication and identity confirmation open the exact saved setup; local
+host administration and action approval retain their own boundaries. See the
+operation inventory in the companion and the [qualification record](../../doc/plans/2026-10-13-connection-api-parity.md).
+
+Automated: [agent-authenticated integration](../../server/src/__tests__/connection-management.integration.test.ts)
+uses normal creation defaults, persistent agent keys, run JWTs, native tool bindings,
+real database persistence, and deterministic provider fixtures. It separately checks
+user/agent revocation, trust, company/ownership scope, work modes and attribution.
+This is API reachability evidence, not a live provider setup or an LLM success rate.
