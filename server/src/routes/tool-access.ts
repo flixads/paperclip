@@ -630,7 +630,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
       ...connectionRequestContext(req)?.resource, type: "connection_management", companyId,
       connectionId: undefined, selfServiceUserId: undefined, readOnly: false,
       operation: connectionRequestContext(req)?.resource.operation ?? "configure",
-    })).allowed;
+    }, { readContext: connectionRequestContext(req) })).allowed;
     const membership = toolMembershipRole(req, companyId);
     if (membership.unrestricted) return true;
     if (!membership.isActive || membership.isViewer) return false;
@@ -674,8 +674,8 @@ function connectorEnrollmentPrincipal(req: Request): string {
     const resource = { ...connectionRequestContext(req)?.resource, type: "connection_management" as const,
       companyId: connection.companyId, connectionId: connection.id, operation: "configure",
       readOnly: false, selfServiceUserId: connection.createdByUserId };
-    const manage = await management.capability(req.actor, "connections:configure", resource);
-    const use = await management.capability(req.actor, "connections:test", { ...resource, operation: "use" }, { mutation: false });
+    const manage = await management.capability(req.actor, "connections:configure", resource, { readContext: connectionRequestContext(req) });
+    const use = await management.capability(req.actor, "connections:test", { ...resource, operation: "use" }, { mutation: false, readContext: connectionRequestContext(req) });
     const toolAccess = req.actor.type === "agent" && req.actor.agentId && options.toolGateway
       ? await options.toolGateway.summarizeConnectionAccessForAgent({ companyId: connection.companyId, connectionId: connection.id,
         agentId: req.actor.agentId, heartbeatRunId: req.actor.runId, issueId: resource.issueId, projectId: resource.projectId }) : null;
@@ -688,7 +688,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     if (mutationCapable) {
       const companyAgents = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, connection.companyId));
       for (const agent of companyAgents) {
-        const capability = await management.capability(req.actor, "connections:profiles", { ...resource, targetAgentId: agent.id });
+        const capability = await management.capability(req.actor, "connections:profiles", { ...resource, targetAgentId: agent.id }, { readContext: connectionRequestContext(req) });
         if (capability.allowed) editableAgentIds.push(agent.id);
       }
     }
@@ -1632,7 +1632,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     const companyId = req.params.companyId as string;
     assertToolAppMutationAccess(req, companyId);
     try {
-      const application = await svc.createApplication(companyId, req.body);
+      const application = await svc.createApplication(companyId, req.body, connectionRequestContext(req));
       await logActivity(db, {
         companyId,
         ...connectionRequestActor(req),
@@ -1652,7 +1652,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     if (!existing) return;
     assertToolAppMutationAccess(req, existing.companyId);
     try {
-      const application = await svc.updateApplication(existing.id, req.body);
+      const application = await svc.updateApplication(existing.id, req.body, connectionRequestContext(req));
       await logActivity(db, {
         companyId: application.companyId,
         ...connectionRequestActor(req),
@@ -1671,7 +1671,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     const existing = await getAccessibleResource(req, res, svc.getApplication(req.params.applicationId as string), "Tool application not found");
     if (!existing) return;
     assertToolAppMutationAccess(req, existing.companyId);
-    const application = await svc.deleteApplication(existing.id);
+    const application = await svc.deleteApplication(existing.id, connectionRequestContext(req));
     await logActivity(db, {
       companyId: application.companyId,
       ...connectionRequestActor(req),
@@ -1695,7 +1695,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
       const allowed = await Promise.all(visible.map(connection => management.capability(req.actor, "connections:read", {
         type: "connection_management", companyId, connectionId: connection.id,
         operation: "GET /companies/:companyId/tools/connections", readOnly: true,
-      }, { mutation: false })));
+      }, { mutation: false, readContext: connectionRequestContext(req) })));
       visible = visible.filter((_, index) => allowed[index].allowed);
     }
     res.json({ connections: visible });
@@ -2174,7 +2174,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     if (!existing) return;
     await assertToolConnectionConfigureAccess(req, existing);
     if (aiConnectionRouterPluginKey(existing)) throw badRequest("Update this connection pool through its pool settings.");
-    const connection = await svc.updateConnection(existing.id, req.body);
+    const connection = await svc.updateConnection(existing.id, req.body, connectionRequestContext(req));
     const lifecycleChanges = classifyConnectionUpdate(
       { enabled: existing.enabled, config: existing.config },
       { enabled: connection.enabled, config: connection.config },
@@ -2589,7 +2589,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
   router.post("/companies/:companyId/tools/policies/reorder", managementGuard("connections:profiles", "POST /companies/:companyId/tools/policies/reorder", { personal: true }), validate(reorderToolPoliciesSchema), async (req, res) => {
     const companyId = req.params.companyId as string;
     assertToolAppMutationAccess(req, companyId);
-    const policies = await policySvc.reorderPolicies(companyId, req.body);
+    const policies = await policySvc.reorderPolicies(companyId, req.body, connectionRequestContext(req));
     await logActivity(db, {
       companyId,
       ...connectionRequestActor(req),
@@ -2608,7 +2608,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     const companyId = req.params.companyId as string;
     assertToolAppMutationAccess(req, companyId);
     try {
-      const policy = await policySvc.createPolicy(companyId, req.body, { userId: connectionRequestUserId(req) ?? null, agentId: req.actor.agentId ?? null });
+      const policy = await policySvc.createPolicy(companyId, req.body, { userId: connectionRequestUserId(req) ?? null, agentId: req.actor.agentId ?? null }, connectionRequestContext(req));
       await logActivity(db, {
         companyId,
         ...connectionRequestActor(req),
@@ -2629,6 +2629,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     try {
       const policy = await policySvc.duplicatePolicy({
         companyId,
+        managementContext: connectionRequestContext(req),
         policyId: req.params.policyId as string,
         body: req.body,
         actor: { userId: connectionRequestUserId(req) ?? null, agentId: req.actor.agentId ?? null },
@@ -2658,6 +2659,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     try {
       const policy = await policySvc.updatePolicy({
         companyId,
+        managementContext: connectionRequestContext(req),
         policyId: req.params.policyId as string,
         body: req.body,
       });
@@ -2680,6 +2682,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     assertToolAppMutationAccess(req, companyId);
     const policy = await policySvc.deletePolicy({
       companyId,
+        managementContext: connectionRequestContext(req),
       policyId: req.params.policyId as string,
     });
     await logActivity(db, {
