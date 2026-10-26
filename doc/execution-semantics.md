@@ -1345,6 +1345,35 @@ discard the stopped run's files or grant authority over the new assignee.
 
 Every continuation carries the triggering request, ordered user direction, interaction outcomes, completed work, and explicit history coverage. A delivered message remains part of the task's request after its connection or approval resolves. The original title is background; a completed Notion read does not satisfy a later Gmail request. Author and source-trust boundaries survive rendering into both native and legacy prompts. Missing required history must be fetched before dispatch rather than described as complete.
 
+### Remote runner process evidence
+
+A failed remote health request does not prove that runnerd stopped. Read-only
+process checks retry transient transport failures up to three times within one
+30-second budget. Missing or changed identity, an unknown process generation,
+and exhausted health reads retain uncertainty. They do not authorize a signal,
+replacement launch, or provider replay. Confirmed predecessor exit permits the
+transport to attempt recovery within its existing reconnect deadline. Repeated
+listener conflicts use that same deadline and port; they do not grant ownership
+of another listener.
+
+The remote launcher retains a stop signal received while artifact staging is
+pending. It checks cancellation again immediately before dispatch. A cancelled
+launch that has not been dispatched settles without starting a process. If a
+launch RPC is already in flight, signalling waits for its exact identity and
+uses the existing marker, nonce, PID and runner identity checks. The signal
+request is not a termination receipt. Monitor evidence still decides whether
+an already dispatched process stopped.
+
+A runner receipt that its reconnect grace expired ends that incident. The
+transport recognizes both the coded error and the runner's plain-text message.
+It must not open another recovery window after that receipt.
+
+A bounded transport close can return before artifact staging settles. That
+return does not prove cleanup completed or release the retained-state obligation.
+Launch attempts, authenticated runner connections, provider process entries,
+provider turns, and external effects are different counts. Transport recovery
+alone does not prove the shared provider-attempt budget or authorize a new turn.
+
 ### Interrupted conversation continuation
 
 Before provider dispatch, chat-control admission retries transient database lock
