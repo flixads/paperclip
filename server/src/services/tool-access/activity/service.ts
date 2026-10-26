@@ -110,11 +110,18 @@ listConnectionActivity: async (
         .orderBy(desc(toolCallEvents.createdAt))
         .limit(safeLimit);
       if (managementContext?.actor.type === "agent") {
+        const management = connectionManagementService(db);
+        const taskVisibility = new Map<string | null, boolean>();
         const visible: typeof rows = [];
         for (const row of rows) {
-          if ((await connectionManagementService(db).capability(managementContext.actor, "connections:audit", {
-            ...managementContext.resource, connectionId: connection.id, issueId: row.issueId,
-          }, { mutation: false })).allowed) visible.push(row);
+          let allowed = taskVisibility.get(row.issueId);
+          if (allowed === undefined) {
+            allowed = (await management.capability(managementContext.actor, "connections:audit", {
+              ...managementContext.resource, connectionId: connection.id, issueId: row.issueId,
+            }, { mutation: false, readContext: managementContext })).allowed;
+            taskVisibility.set(row.issueId, allowed);
+          }
+          if (allowed) visible.push(row);
         }
         rows = visible;
       }
