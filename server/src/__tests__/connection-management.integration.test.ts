@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { activityLog, agentApiKeys, companies, companySecrets, chatConversations, chatDeliveries, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
+import { activityLog, agentApiKeys, companies, companySecrets, chatConversations, chatDeliveries, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolCallEvents, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
@@ -800,6 +800,37 @@ describe("connection management with production default agents", () => {
         expect(listed.body.map((account: { id: string }) => account.id)).toEqual([created.body.id]);
       }
     } finally { provider = null; }
+  });
+
+  it("shares tool-activity authorization by task and reuses run identity within one page", async () => {
+    const f = await fixture();
+    const connection = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Activity page", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
+    expect(connection).toMatchObject({ status: 201 });
+    const [hidden] = await server.db.insert(issues).values({ companyId: f.companyId, title: "Private activity task", visibility: "private", status: "in_progress", responsibleUserId: randomUUID() }).returning();
+    await server.db.insert(toolCallEvents).values(Array.from({ length: 100 }, (_, index) => ({ companyId: f.companyId, connectionId: connection.body.id,
+      eventType: "policy_decision" as const, actorType: "agent", actorId: f.agentId, issueId: index % 2 ? f.issueId : hidden.id, toolName: index % 2 ? "visible" : "private_activity" })));
+    const original = connectionManagementModule.connectionManagementService;
+    const checked: string[] = [];
+    const authorization = vi.spyOn(connectionManagementModule, "connectionManagementService").mockImplementation((db) => {
+      const service = original(db);
+      return { ...service, capability: async (...args: Parameters<typeof service.capability>) => {
+        if (args[1] === "connections:audit") checked.push(args[2].issueId ?? "unbound");
+        return service.capability(...args);
+      } };
+    });
+    const capture = vi.spyOn(runIdentity, "captureRunIdentity");
+    try {
+      const path = `/tool-connections/${connection.body.id}/activity?limit=100`;
+      const result = await f.request("GET", path, undefined, f.jwt);
+      expect(result, JSON.stringify(result)).toMatchObject({ status: 200 });
+      expect(result.body.events).toHaveLength(50);
+      expect(JSON.stringify(result.body)).not.toContain("private_activity");
+      expect(checked, JSON.stringify({ checks: checked.length, captures: capture.mock.calls.length })).toHaveLength(2);
+      expect(capture.mock.calls.length).toBeGreaterThan(0);
+      expect(capture.mock.calls.length).toBeLessThanOrEqual(2);
+      await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:view_audit")));
+      expect(await f.request("GET", path, undefined, f.jwt)).toMatchObject({ status: 403 });
+    } finally { authorization.mockRestore(); capture.mockRestore(); }
   });
 
   it("bounds activity authorization to the requested page rather than endpoint history", async () => {
