@@ -38,6 +38,7 @@ import type {
 } from "@paperclipai/shared";
 import {
   isAgentStatusInvokable,
+  isUuidLike,
 } from "@paperclipai/shared";
 
 import {
@@ -85,6 +86,7 @@ function providerSetupState(
   const path = endpoint.provider === "speko" ? `/api/voice-webhooks/${endpoint.publicId}/tools` : `/api/chat-webhooks/${endpoint.publicId}/${endpoint.provider}`;
   const webhookUrl = publicBaseUrl ? `${publicBaseUrl}${path}` : null;
   const step = endpoint.status === "active" ? "complete" : endpoint.setup.step;
+  const rotationId: unknown = Reflect.get(endpoint.setup, "credentialRotationId");
   switch (endpoint.provider) {
     case "speko":
       return { step, providerUrl: "https://platform.speko.ai/", webhookUrl } as const;
@@ -103,6 +105,7 @@ function providerSetupState(
         providerUrl: "https://github.com/settings/installations",
         webhookUrl,
         webhookVerifiedAt: endpoint.setup.webhookVerifiedAt ?? null,
+        credentialRotationId: typeof rotationId === "string" && isUuidLike(rotationId) ? rotationId : null,
       } as const;
     case "discord":
       return {

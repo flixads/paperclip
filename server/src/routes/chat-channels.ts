@@ -1,5 +1,5 @@
 import { connectionManagementService } from "../services/connection-management.js";
-import { connectionIntentService, savedChatSetupPath } from "../services/connection-intents.js";
+import { chatCredentialRotationId, connectionIntentService, savedChatSetupPath } from "../services/connection-intents.js";
 import { companies } from "@paperclipai/db";
 import { eq } from "drizzle-orm";
 import { requiredConnectionUserAction, filterConnectionManagementRows, connectionManagementGuard, connectionRequestContext, connectionRequestUserId } from "./connection-management-authz.js";
@@ -109,13 +109,15 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
     const endpoint = await service.get(endpointId(req));
     const [company] = await db.select({ prefix: companies.issuePrefix }).from(companies).where(eq(companies.id, endpoint.companyId));
     const action = options.requireCredentialRotation ? "rotate_credentials" as const : kind === "enter_credentials" || kind === "confirm_identity" ? kind : undefined;
-    const interactionId = req.actor.type === "agent" && req.actor.runId && endpoint.assignedAgentId === req.actor.agentId
+    const handoff = req.actor.type === "agent" && req.actor.runId && endpoint.assignedAgentId === req.actor.agentId
       ? await connectionIntentService(db).requestChatHandoff({ sub: req.actor.agentId!, company_id: endpoint.companyId,
           run_id: req.actor.runId, responsible_user_id: connectionRequestUserId(req)! }, endpoint.id, { action })
       : null;
+    const interactionId = handoff?.interactionId ?? null;
+    const previousRotationId = handoff ? handoff.previousRotationId : chatCredentialRotationId(endpoint.setup);
     return { status: "needs_user_action", interactionId, endpointId: endpoint.id, connectionId: endpoint.connectionId,
       ...requiredConnectionUserAction(req, { type: "chat_endpoint", id: endpoint.id, companyId: endpoint.companyId },
-        savedChatSetupPath(company!.prefix, endpoint, action), reason, kind),
+        savedChatSetupPath(company!.prefix, endpoint, action, previousRotationId), reason, kind),
     };
   }
 

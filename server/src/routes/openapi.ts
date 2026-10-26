@@ -835,6 +835,7 @@ const chatEndpointSetupResponseSchema = z
     webhookUrl: z.string().nullable().optional(),
     messagingEndpoint: z.string().nullable().optional(),
     webhookVerifiedAt: z.string().datetime().nullable().optional(),
+    credentialRotationId: z.string().uuid().nullable().optional(),
     webhookSecretConfigured: z.boolean().optional(),
     callbackSurfaces: z
       .object({

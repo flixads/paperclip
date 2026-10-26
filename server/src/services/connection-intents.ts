@@ -72,11 +72,11 @@ export function chatCredentialRotationId(setup: object): string | null {
   return typeof value === "string" && isUuidLike(value) ? value : null;
 }
 
-export function savedChatSetupPath(prefix: string, endpoint: { id: string; provider: string }, action?: SavedChatSetup["action"]) {
+export function savedChatSetupPath(prefix: string, endpoint: { id: string; provider: string }, action?: SavedChatSetup["action"], previousRotationId?: string | null) {
   const query = new URLSearchParams({ provider: endpoint.provider, resume: endpoint.id });
   if (action === "enter_credentials" || action === "rotate_credentials") query.set("stage", "credentials");
   if (action === "confirm_identity") query.set("stage", "identity");
-  if (action === "rotate_credentials") { query.set("reconnect", "1"); query.set("rotateSecret", "1"); }
+  if (action === "rotate_credentials") { query.set("reconnect", "1"); query.set("rotateSecret", "1"); query.set("afterRotationId", previousRotationId ?? "none"); }
   return `/${encodeURIComponent(prefix)}/apps/chat/connect?${query}`;
 }
 
@@ -911,7 +911,7 @@ export function connectionIntentService(db: Db) {
       addresseeUserId: context.run.responsibleUserId!, idempotencyKey: `chat-${options.action ?? "authentication"}:${context.issue.id}:${context.run.responsibleUserId}:${endpoint.id}${options.action === "rotate_credentials" ? `:${context.run.id}` : ""}`,
     });
     if (interaction.status !== "pending") throw conflict("This setup request has already been resolved. Follow its recorded outcome.");
-    return interaction.id;
+    return { interactionId: interaction.id, previousRotationId: connectionIntentPayloadSchema.parse(interaction.payload).savedSetup?.credentialRotation?.previousId ?? null };
   }
 
   async function setupOptions(interactionId: string, options: { canManageOrganizationGrant?: boolean } = {}): Promise<ConnectionIntentSetupOptions> {
@@ -929,7 +929,7 @@ export function connectionIntentService(db: Db) {
       return { version: 1, interaction: loaded.interaction, requestedAgentId: payload.requestingAgentId, existingConnections: [],
         service: { service: payload.serviceSlug, name: payload.serviceName, description: null, logoUrl: null, methods: [], state: "needs_user_action", connectionId: endpoint.connectionId },
         chatSetup: { endpointId: endpoint.id, connectionId: endpoint.connectionId,
-          path: savedChatSetupPath(company!.prefix, endpoint, payload.savedSetup.action) },
+          path: savedChatSetupPath(company!.prefix, endpoint, payload.savedSetup.action, payload.savedSetup.credentialRotation?.previousId) },
       };
     }
     const app = await resolveService(payload.serviceSlug, loaded.issue.companyId, loaded.interaction.addresseeUserId!, payload.requestingAgentId, payload.purpose);
