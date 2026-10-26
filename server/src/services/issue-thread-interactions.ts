@@ -2617,7 +2617,12 @@ export function issueThreadInteractionService(
         candidate.savedSetup?.endpointId === payload.savedSetup?.endpointId
         && candidate.savedSetup?.connectionId === payload.savedSetup?.connectionId
         && candidate.savedSetup?.action === payload.savedSetup?.action
-        && Boolean(candidate.savedSetup?.credentialRotation) === Boolean(payload.savedSetup?.credentialRotation);
+        && Boolean(candidate.savedSetup?.credentialRotation) === Boolean(payload.savedSetup?.credentialRotation)
+        && candidate.savedSetup?.credentialEntry?.requireAll === payload.savedSetup?.credentialEntry?.requireAll
+        // Preserve the original generation boundary on retries, while keeping
+        // requests for different credential fields distinct.
+        && isDeepStrictEqual(Object.keys(candidate.savedSetup?.credentialEntry?.previousGenerations ?? {}).sort(),
+          Object.keys(payload.savedSetup?.credentialEntry?.previousGenerations ?? {}).sort());
       const existing = await getIdempotentInteraction({
         issueId: issue.id,
         companyId: issue.companyId,

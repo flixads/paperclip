@@ -1,5 +1,6 @@
 import { enqueueTerminalIssueInteractionChatPublications } from "./chat-interaction-publications.js";
 import { connectionManagementService } from "./connection-management.js";
+import { chatCredentialEntryGenerations } from "./chat-channels/credentials.js";
 import { and, asc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 import { approvals, chatEndpoints, toolConnections, companyMemberships, connectionIntentDeliveries, issueApprovals, issueThreadInteractions, issues, type Db } from "@paperclipai/db";
 import { connectionIntentPayloadSchema } from "@paperclipai/shared";
@@ -29,6 +30,15 @@ async function findAvailableToolConnection(db: Db, task: Task, intent: Intent, p
     const [connection] = await db.select().from(toolConnections).where(and(eq(toolConnections.id, endpoint.connectionId),
       eq(toolConnections.companyId, task.companyId), eq(toolConnections.status, "active"), eq(toolConnections.enabled, true)));
     if (!connection || !["ok", "healthy"].includes(connection.healthStatus)) return null;
+    if (payload.savedSetup.action === "enter_credentials") {
+      const proof = payload.savedSetup.credentialEntry;
+      if (!proof) return null;
+      const generations = chatCredentialEntryGenerations(endpoint.setup);
+      const fields = Object.keys(proof.previousGenerations);
+      const changed = fields.filter(field => typeof generations[field] === "string" && generations[field] !== proof.previousGenerations[field]);
+      if (!changed.length || (proof.requireAll && changed.length !== fields.length)) return null;
+      if (changed.some(field => field === "signingSecret" || field === "webhookSecret") && !endpoint.setup.webhookVerifiedAt) return null;
+    }
     if (payload.savedSetup.credentialRotation) {
       // Rotation commits its generation and clears webhook verification in the
       // same transaction as vault refs. Old health cannot satisfy this request.

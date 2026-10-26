@@ -16,7 +16,8 @@ import { type CredentialMutationLeaseGuard } from "../chat-credential-mutation-l
 
 import { photonSharedScope } from "../photon/cloud.js";
 
-import { photonChannelConfigurationSchema } from "@paperclipai/shared";
+import { isUuidLike, photonChannelConfigurationSchema } from "@paperclipai/shared";
+import { notifyChatEndpointWork } from "../chat-work-notifications.js";
 
 import {
   randomBytes,
@@ -27,6 +28,7 @@ import {
   eq,
   inArray,
   ne,
+  sql,
 } from "drizzle-orm";
 
 import type { Db } from "@paperclipai/db";
@@ -57,6 +59,17 @@ import {
 } from "../chat-teams-credentials.js";
 
 import { secretService } from "../secrets.js";
+
+export const CHAT_HUMAN_CREDENTIAL_FIELDS = ["signingSecret", "webhookSecret", "privateKey", "clientSecret", "projectSecret"] as const;
+
+/** Opaque generations identify actual protected-value changes, never secret bytes. */
+export function chatCredentialEntryGenerations(setup: object): Record<string, string | null> {
+  const generations: unknown = Reflect.get(setup, "credentialEntryGenerations");
+  return Object.fromEntries(CHAT_HUMAN_CREDENTIAL_FIELDS.map(field => {
+    const value: unknown = generations && typeof generations === "object" ? Reflect.get(generations, field) : null;
+    return [field, typeof value === "string" && isUuidLike(value) ? value : null];
+  }));
+}
 
 type ChatCredentialsOptions = {
   secrets: ReturnType<typeof secretService>;
@@ -266,6 +279,12 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
         ),
       )
       .then((rows) => rows[0]?.refs ?? []);
+    const protectedFields = CHAT_HUMAN_CREDENTIAL_FIELDS.filter(field => credentials[field] !== undefined);
+    const previousValues = protectedFields.length ? await resolveCredentialRefs(endpoint, previousRefs.filter(
+      ref => protectedFields.some(field => ref.configPath === `credentials.${field}`),
+    )) : {};
+    const changedFields = protectedFields.filter(field => credentials[field] !== previousValues[field]);
+    const generations = Object.fromEntries(changedFields.map(field => [field, randomUUID()]));
     const refs: ToolCredentialSecretRef[] = [];
     try {
       for (const [key, value] of Object.entries(credentials)) {
@@ -345,6 +364,16 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
           .update(toolConnections)
           .set({ credentialSecretRefs: refs, updatedAt: new Date() })
           .where(eq(toolConnections.id, endpoint.connectionId));
+        if (changedFields.length) {
+          await notifyChatEndpointWork(tx, endpoint.connectionId);
+          const verification = changedFields.some(field => field === "signingSecret" || field === "webhookSecret")
+            ? { webhookVerifiedAt: null } : {};
+          await tx.update(chatEndpoints).set({
+            // Fence old healthy state in the same transaction as the new refs.
+            status: sql`case when ${chatEndpoints.status} = 'active' then 'verifying' else ${chatEndpoints.status} end`,
+            setup: sql`jsonb_set(${chatEndpoints.setup}, '{credentialEntryGenerations}', coalesce(${chatEndpoints.setup}->'credentialEntryGenerations', '{}'::jsonb) || ${JSON.stringify(generations)}::jsonb) || ${JSON.stringify(verification)}::jsonb`,
+          }).where(and(eq(chatEndpoints.id, endpoint.id), eq(chatEndpoints.companyId, endpoint.companyId)));
+        }
         await onCommitted?.(tx as unknown as Db);
         await credentialLease.assertOwned(tx);
       });
