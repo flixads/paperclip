@@ -87,19 +87,34 @@ vi.mock("./installation-integrity.js", () => ({ verifyNativeAcpxInstallation: vi
 
 describe("Copilot build-owned installation", () => {
   it("admits the current profile with environment launch preparation", () => {
-    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(61);
+    expect(QUALIFIED_ACPX_PROFILES.copilot.agentProfileVersion).toBe(62);
     expect(QUALIFIED_ACPX_PROFILES.copilot.qualificationStatus).toBeUndefined();
-    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:ed07dcd9487c5e1e2bd863a25f7297e5c98316abc51629e9650cd2a9ce29faf9");
+    expect(QUALIFIED_ACPX_PROFILES.copilot.commandDigest).toBe("sha256:ec8d1d9e570403fb1b1324b2357575e9226b8a2f9eefcc8bf573b59e36653d52");
   });
 
-  it("preserves v60 while binding delegated connection guidance in v61", () => {
-    const prior = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v60-identity.json", import.meta.url), "utf8"));
-    const current = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v61-identity.json", import.meta.url), "utf8"));
+  it("preserves v61 while binding delegated connection guidance in v62", () => {
+    const prior = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v61-identity.json", import.meta.url), "utf8"));
+    const current = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v62-identity.json", import.meta.url), "utf8"));
     expect(Object.keys(current.declaration).filter(key => current.declaration[key] !== prior.declaration[key]).sort()).toEqual([
       "agentProfileVersion", "nativeRuntimePromptsSourceSha256", "profileCompatibilitySourceSha256",
     ]);
+    expect(isSupportedAcpxProfileVersion("copilot", 61)).toBe(true);
+    expect(current.commandDigest).not.toBe(prior.commandDigest);
+  });
+
+  it("preserves v60 while binding controller journal retirement in v61", async () => {
+    const priorBytes = readFileSync(new URL("../../../test/fixtures/copilot-profile-v60-identity.json", import.meta.url));
+    expect(createHash("sha256").update(priorBytes).digest("hex")).toBe("e3c45b0311517d05f06ed10f357db713ae157cfa87e4a8becf087c5b6dfa7003");
+    const prior = JSON.parse(priorBytes.toString("utf8"));
+    const current = JSON.parse(readFileSync(new URL("../../../test/fixtures/copilot-profile-v61-identity.json", import.meta.url), "utf8"));
+    expect(Object.keys(current.declaration).filter(key => current.declaration[key] !== prior.declaration[key]).sort()).toEqual([
+      "agentProfileVersion", "profileCompatibilitySourceSha256", "runtimeRequestBridgeSourceSha256",
+    ]);
+    expect(Object.keys(current.declaration).sort()).toEqual(Object.keys(prior.declaration).sort());
     expect(isSupportedAcpxProfileVersion("copilot", 60)).toBe(true);
     expect(current.commandDigest).not.toBe(prior.commandDigest);
+    await expect(verifyCopilotInstallation({ ...QUALIFIED_ACPX_PROFILES.copilot,
+      agentProfileVersion: 60, commandDigest: prior.commandDigest })).rejects.toThrow("exact pinned");
   });
 
   it("preserves v59 while binding the Codex-only hosted search restriction in v60", async () => {

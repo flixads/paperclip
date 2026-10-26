@@ -97,12 +97,10 @@ export function connectionManagementService(db: Db) {
           const companyAgents = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, resource.companyId));
           companyAgents.forEach(agent => expandedTargets.add(agent.id));
         }
-        if (["issue", "routine", "gateway"].includes(binding.targetType)) {
+        if (["project", "issue", "routine", "gateway"].includes(binding.targetType)) {
           await authorizeBindingTarget(actor, action, resource, binding, options);
         }
-        if (binding.targetType === "project") {
-          await authorize(actor, action, { ...resource, projectId: binding.targetId }, { ...options, expandedProfile: true, gatewayContextChecked: options.gatewayContextChecked || Boolean(resource.gatewayId) });
-        }
+
       }
       const linkedGateways = await db.select({ id: toolMcpGateways.id }).from(toolMcpGateways).where(and(eq(toolMcpGateways.companyId, resource.companyId), eq(toolMcpGateways.profileId, profile.id)));
       for (const gateway of linkedGateways) await authorizeBindingTarget(actor, action, resource, { targetType: "gateway", targetId: gateway.id }, options);
@@ -250,7 +248,12 @@ export function connectionManagementService(db: Db) {
     options: NonNullable<Parameters<typeof authorize>[3]> = {}): Promise<ConnectionManagementContext> {
     let resolved = { ...resource };
     const checkOptions = { ...options, expandedProfile: true };
-    if (binding.targetType === "issue") resolved.issueId = binding.targetId;
+    if (binding.targetType === "project") {
+      resolved.projectId = binding.targetId;
+      const rows = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, resource.companyId));
+      checkOptions.targetAgentIds = [...new Set([...(options.targetAgentIds ?? []), ...rows.map(row => row.id)])];
+    }
+    else if (binding.targetType === "issue") resolved.issueId = binding.targetId;
     else if (binding.targetType === "routine") resolved.routineId = binding.targetId;
     else if (binding.targetType === "gateway") {
       const [gateway] = await db.select().from(toolMcpGateways).where(and(eq(toolMcpGateways.id, binding.targetId), eq(toolMcpGateways.companyId, resource.companyId)));

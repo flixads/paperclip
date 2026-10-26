@@ -353,7 +353,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
             selfServiceUserId: connection.createdByUserId,
           });
         }
-        if (["issue", "routine", "gateway"].includes(String(selected.targetType)) && text(selected.targetId)) bindingTargets.push({ targetType: String(selected.targetType), targetId: uuid(selected.targetId) });
+        if (["project", "issue", "routine", "gateway"].includes(String(selected.targetType)) && text(selected.targetId)) bindingTargets.push({ targetType: String(selected.targetType), targetId: uuid(selected.targetId) });
         if (text(selected.routineId)) extraResources.push({ ...resource, routineId: uuid(selected.routineId) });
         if (selected.targetType === "project" && text(selected.targetId)) extraResources.push({ ...resource, projectId: String(selected.targetId) });
         if (text(selected.projectId)) extraResources.push({ ...resource, projectId: String(selected.projectId) });
