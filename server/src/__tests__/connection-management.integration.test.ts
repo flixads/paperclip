@@ -4,13 +4,14 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { activityLog, agentApiKeys, companies, companySecrets, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
+import { activityLog, agentApiKeys, companies, companySecrets, chatConversations, chatDeliveries, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
 import * as remoteEndpointGuard from "../services/remote-http-endpoint-guard.js";
 import * as remoteHttpFetch from "../services/remote-http-fetch.js";
 import * as runIdentity from "../services/run-identity.js";
+import * as connectionManagementModule from "../services/connection-management.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { startRunnerApiTestServer } from "./helpers/runner-api-server.js";
 import { getServerAdapter, registerServerAdapter, unregisterServerAdapter } from "../adapters/index.js";
@@ -759,6 +760,32 @@ describe("connection management with production default agents", () => {
         expect(listed.body.map((account: { id: string }) => account.id)).toEqual([created.body.id]);
       }
     } finally { provider = null; }
+  });
+
+  it("bounds activity authorization to the requested page rather than endpoint history", async () => {
+    const f = await fixture();
+    const endpoint = await f.request("POST", `/companies/${f.companyId}/chat-endpoints`, { provider: "github", assignedAgentId: f.agentId });
+    expect(endpoint).toMatchObject({ status: 201 });
+    const conversations = await server.db.insert(chatConversations).values(Array.from({ length: 200 }, (_, index) => ({
+      companyId: f.companyId, endpointId: endpoint.body.id, issueId: f.issueId,
+      externalConversationId: `history-${index}`, externalLabel: `History ${index}`,
+    }))).returning();
+    const [delivery] = await server.db.insert(chatDeliveries).values({ companyId: f.companyId, endpointId: endpoint.body.id,
+      conversationId: conversations[0].id, providerEventId: randomUUID(), deduplicationKey: randomUUID(), eventKind: "mention", state: "processed", normalizedEvent: {} }).returning();
+    const original = connectionManagementModule.connectionManagementService;
+    const checked: string[] = [];
+    const authorization = vi.spyOn(connectionManagementModule, "connectionManagementService").mockImplementation((db) => {
+      const service = original(db);
+      return { ...service, capability: async (...args: Parameters<typeof service.capability>) => {
+        if (args[1] === "connections:audit") checked.push(args[2].issueId ?? "unbound");
+        return service.capability(...args);
+      } };
+    });
+    try {
+      const result = await f.request("GET", `/chat-endpoints/${endpoint.body.id}/activity?limit=1`, undefined, f.jwt);
+      expect(result, JSON.stringify(result)).toMatchObject({ status: 200, body: { items: [expect.objectContaining({ id: delivery.id })] } });
+      expect(checked).toEqual([f.issueId]);
+    } finally { authorization.mockRestore(); }
   });
 
   it("saves delegated Arcade discovery for the responsible user and shares its inventory with that user", async () => {
