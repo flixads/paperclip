@@ -16,6 +16,7 @@ import { browserUseService } from "./browser-use.js";
 import { isBrowserUseConnection } from "./browser-use-client.js";
 import { COGNEE_STDIO_TEMPLATE, cogneeCloudUrl, callCogneeCloud } from "./cognee-connection.js";
 import { HttpError } from "../errors.js";
+import { authorizationService, canActorReadIssuePrivacy, type AuthorizationActor } from "./authorization.js";
 import { claimSlackRateLimitRetry } from "./connectors/slack-retry.js";
 import { resolveSlackTaskAuthority } from "./connectors/slack-authority.js";
 import { SLACK_TOOLS } from "@paperclipai/shared";
@@ -1195,11 +1196,11 @@ export function createToolGatewayService(
       signal?.throwIfAborted();
       // Legacy/plugin sessions may not carry identity fields. Resolve them from
       // the admitted run, never from parameters. Signed approvals keep their origin.
-      let identity = session;
+      let identity = session.originatingAgentId ? { ...session, agentId: session.originatingAgentId } : session;
       if (session.runId && !approvedAction && !session.identityContextId) {
         const [run] = await db.select({ responsibleUserId: heartbeatRuns.responsibleUserId }).from(heartbeatRuns)
           .where(and(eq(heartbeatRuns.id, session.runId), eq(heartbeatRuns.companyId, session.companyId)));
-        identity = await captureSessionIdentity({ ...session, responsibleUserId: run?.responsibleUserId ?? session.responsibleUserId });
+        identity = await captureSessionIdentity({ ...identity, responsibleUserId: run?.responsibleUserId ?? session.responsibleUserId });
       }
       return injectionPrevention.classify({ companyId: identity.companyId, source: "gateway",
         actorType: identity.actorType === "user" ? "user" : identity.agentId ? "agent" : "system",
@@ -3827,7 +3828,7 @@ export function createToolGatewayService(
     try {
       return (await resolveConnectionGrantSecret(db, connection, grant, ref, {
         consumerType: "tool_connection", consumerId: connection.id,
-        actorType: "system", actorId: session.agentId,
+        actorType: "system", actorId: session.originatingAgentId ?? session.agentId,
         responsibleUserId: grant.subjectUserId, issueId: session.issueId, heartbeatRunId: session.runId,
       })).value;
     } catch (error) {
@@ -7425,6 +7426,41 @@ export function createToolGatewayService(
     );
   }
 
+  function delegatedTestCallerSession(session: ToolGatewaySession): ToolGatewaySession | null {
+    const callerId = session.originatingAgentId;
+    return callerId && callerId !== session.agentId ? { ...session, agentId: callerId } : null;
+  }
+
+  async function assertDelegatedTestCredentialAccess(session: ToolGatewaySession, tool: ToolGatewayDescriptor) {
+    const caller = delegatedTestCallerSession(session);
+    if (!caller || !tool.connectionId) return;
+    if (!(await policyService.hasProfileAccess(policyInputForTool({ session: caller, tool })))) {
+      throw new ToolGatewayHttpError(403, "Connection is not available in the acting agent's profiles", "test_caller_connection_unavailable");
+    }
+    const [connection] = await db.select().from(toolConnections).where(and(
+      eq(toolConnections.companyId, session.companyId), eq(toolConnections.id, tool.connectionId),
+    ));
+    if (!connection) throw new ToolGatewayHttpError(404, "Tool connection not found", "connection_not_found");
+    if (connection.authKind === "none") return;
+    // Resolve consent metadata before any vault read. Testing another agent
+    // cannot select that agent's dedicated credential or a different identity.
+    const callerGrant = await resolveConnectionGrant(caller, connection, false);
+    const targetGrant = await resolveConnectionGrant(session, connection, false);
+    if (callerGrant.id !== targetGrant.id) {
+      throw new ToolGatewayHttpError(403, "Tests cannot use another agent's credential identity", "test_credential_identity_mismatch");
+    }
+  }
+
+  async function assertCurrentDelegatedTestCaller(session: ToolGatewaySession, tool: ToolGatewayDescriptor, parameters: unknown, invocationId: string) {
+    const caller = delegatedTestCallerSession(session);
+    if (!caller) return;
+    const current = await policyService.decide(policyInputForTool({ session: caller, tool, parameters }), { admittedInvocationId: invocationId });
+    if (!current.allowed && !(session.approvedInvocationId && current.decision === "require_approval")) {
+      throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
+    }
+    await assertDelegatedTestCredentialAccess(session, tool);
+  }
+
   /**
    * Execute an already-authorized test-tab tool call against the connected MCP
    * server and record the result/error onto the invocation. Shared by
@@ -7488,6 +7524,7 @@ export function createToolGatewayService(
       await args.managementContext?.reauthorize();
       if (args.managementContext?.actor.type === "agent") {
         Object.assign(args.session, args.managementContext.workContext);
+        await assertCurrentDelegatedTestCaller(args.session, args.tool, args.parameters, args.invocationId);
         const current = await policyService.decide(policyInputForTool({ session: args.session, tool: args.tool, parameters: args.parameters }), { admittedInvocationId: args.invocationId });
         if (!current.allowed && !(args.session.approvedInvocationId && current.decision === "require_approval")) {
           throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
@@ -9564,7 +9601,23 @@ export function createToolGatewayService(
         idempotencyKey: `test-call:${randomUUID()}`,
         consumeRateLimit: true,
       });
-      const accessDecision = await policyService.decide(decisionInput);
+      await assertDelegatedTestCredentialAccess(session, tool);
+      const callerSession = delegatedTestCallerSession(session);
+      const callerDecisionInput = callerSession ? policyInputForTool({ session: callerSession, tool, parameters: requestedParameters, consumeRateLimit: true }) : null;
+      const callerDecision = callerDecisionInput ? await policyService.decide(callerDecisionInput) : null;
+      const targetDecision = await policyService.decide(decisionInput, { sharedRateDecision: callerDecision ?? undefined });
+      // Both principals' action controls apply. Either denial wins; either
+      // Ask first decision creates the ordinary human approval request.
+      const chosenDecision = callerDecision && !callerDecision.allowed && callerDecision.decision !== "require_approval" ? callerDecision
+        : !targetDecision.allowed ? targetDecision
+          : callerDecision?.decision === "require_approval" ? callerDecision : targetDecision;
+      const accessDecision = { ...chosenDecision, policyExplanation: {
+        ...chosenDecision.policyExplanation,
+        consumedRateAdmissions: targetDecision.policyExplanation?.consumedRateAdmissions,
+        delegatedCallerConsumedRateAdmissions: callerDecision?.policyExplanation?.consumedRateAdmissions,
+      } };
+      if (callerDecisionInput && callerDecision) await policyService.writeAudit(callerDecisionInput, callerDecision);
+      if (accessDecision.allowed || accessDecision.decision === "require_approval") await assertDelegatedTestCredentialAccess(session, tool);
       const recorded = await recordToolInvocation(
         decisionInput,
         accessDecision,
@@ -9772,6 +9825,7 @@ export function createToolGatewayService(
       companyId: string;
       connectionId: string;
       actionRequestId: string;
+      actor?: AuthorizationActor;
     }): Promise<ToolConnectionTestCallStatus> {
       const [actionRequest] = await db
         .select()
@@ -9806,6 +9860,23 @@ export function createToolGatewayService(
           "Tool action request not found",
           "action_request_not_found",
         );
+      }
+      if (input.actor?.type === "agent" && invocation.actorId !== input.actor.agentId) {
+        throw new ToolGatewayHttpError(403, "Test belongs to another principal", "test_principal_access_denied");
+      }
+      if (invocation.issueId) {
+        if (!input.actor) throw new ToolGatewayHttpError(403, "Task access is required", "test_task_access_denied");
+        const [issue] = await db.select().from(issues).where(and(eq(issues.companyId, input.companyId), eq(issues.id, invocation.issueId)));
+        const decision = issue ? await authorizationService(db).decide({ actor: input.actor, action: "issue:read", resource: {
+          type: "issue", companyId: input.companyId, issueId: issue.id, projectId: issue.projectId,
+          parentIssueId: issue.parentId, assigneeAgentId: issue.assigneeAgentId, assigneeUserId: issue.assigneeUserId,
+        } }) : null;
+        if (!issue || !decision?.allowed || (input.actor.type === "agent" && (
+          !(await canActorReadIssuePrivacy(db, input.actor, issue)) || !input.actor.onBehalfOfUserId
+          || !(await canActorReadIssuePrivacy(db, { type: "board", userId: input.actor.onBehalfOfUserId }, issue))
+        ))) {
+          throw new ToolGatewayHttpError(403, "Task is unavailable to this principal", "test_task_access_denied");
+        }
       }
       return buildTestCallStatus(actionRequest, invocation);
     },

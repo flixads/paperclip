@@ -190,7 +190,7 @@ function sha256(value: unknown): string {
   return createHash("sha256").update(stableStringify(value)).digest("hex");
 }
 
-type ConsumedRateAdmission = { policyId: string; versionHash: string };
+type ConsumedRateAdmission = { policyId: string; versionHash: string; bucketKey?: string };
 function ratePolicyVersionHash(policy: typeof toolPolicies.$inferSelect): string {
   return sha256({ ...policy, createdAt: policy.createdAt.toISOString(), updatedAt: policy.updatedAt.toISOString() });
 }
@@ -1238,6 +1238,19 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
     return { profiles: activeProfiles, entries };
   }
 
+  function profileAllowsTool(profileState: Awaited<ReturnType<typeof effectiveProfiles>>, ctx: ToolAccessContext) {
+    return profileState.profiles.some(profile => {
+      const entries = profileState.entries.filter(entry => entry.profileId === profile.id && profileEntryMatches(entry, ctx));
+      return !entries.some(entry => entry.effect === "exclude")
+        && (profile.defaultAction === "allow" || entries.some(entry => entry.effect === "include"));
+    });
+  }
+
+  async function hasProfileAccess(input: ToolAccessDecisionInput) {
+    const loaded = await loadContext(input);
+    return loaded.ok && profileAllowsTool(await effectiveProfiles(loaded.ctx), loaded.ctx);
+  }
+
   async function explicitGrant(ctx: ToolAccessContext, cache?: ToolAccessDecisionCache): Promise<boolean> {
     const principalType = ctx.actorType === "agent" ? "agent" : ctx.actorType === "user" ? "user" : null;
     const principalId = ctx.actorType === "agent" ? ctx.agentId : ctx.actorId;
@@ -1386,18 +1399,21 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       status: toolInvocations.status, policyDecision: toolInvocations.policyDecision, approvalState: toolInvocations.approvalState,
       policyExplanation: toolInvocations.policyExplanation,
     }).from(toolInvocations).where(and(eq(toolInvocations.companyId, ctx.companyId), eq(toolInvocations.id, invocationId)));
+    const delegated = invocation?.policyExplanation?.delegatedConnectionTest as { agentId?: string } | undefined;
+    const isDelegatedCaller = invocation?.actorType === "agent" && invocation.actorId === ctx.agentId
+      && delegated?.agentId === ctx.agentId && invocation.agentId !== ctx.agentId;
     const authorized = invocation && (
       (invocation.status === "executing" && (invocation.policyDecision === "allow" || (invocation.policyDecision === "require_approval" && invocation.approvalState === "approved")))
       || (invocation.status === "awaiting_approval" && invocation.policyDecision === "require_approval" && ["pending", "approved"].includes(invocation.approvalState))
     )
-      && invocation.actorType === ctx.actorType && invocation.actorId === ctx.actorId && invocation.agentId === ctx.agentId
+      && invocation.actorType === ctx.actorType && invocation.actorId === ctx.actorId && (invocation.agentId === ctx.agentId || isDelegatedCaller)
       && invocation.runId === ctx.heartbeatRunId && invocation.issueId === ctx.issueId && invocation.gatewayId === ctx.gatewayId
       && invocation.applicationId === ctx.applicationId && invocation.connectionId === ctx.connectionId
       && invocation.catalogEntryId === ctx.catalogEntryId && invocation.toolName === ctx.toolName
       && invocation.providerType === ctx.providerType && invocation.applicationKey === ctx.applicationKey
       && invocation.upstreamToolName === ctx.upstreamToolName
       && invocation.argumentsHash === ctx.argumentsHash;
-    const stored = authorized ? invocation.policyExplanation?.consumedRateAdmissions : null;
+    const stored = authorized ? invocation.policyExplanation?.[isDelegatedCaller ? "delegatedCallerConsumedRateAdmissions" : "consumedRateAdmissions"] : null;
     return Array.isArray(stored) ? stored.filter((item): item is ConsumedRateAdmission => isRecord(item)
       && typeof item.policyId === "string" && CANONICAL_UUID_RE.test(item.policyId)
       && typeof item.versionHash === "string" && /^[a-f0-9]{64}$/.test(item.versionHash)) : [];
@@ -1410,7 +1426,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
    */
   async function decide(
     input: ToolAccessDecisionInput,
-    options: { cache?: ToolAccessDecisionCache; admittedInvocationId?: string } = {},
+    options: { cache?: ToolAccessDecisionCache; admittedInvocationId?: string; sharedRateDecision?: ToolAccessDecision } = {},
   ): Promise<ToolAccessDecision> {
     const consumedRateAdmissions: ConsumedRateAdmission[] = [];
     const result = await decideInternal(input, options, consumedRateAdmissions);
@@ -1421,7 +1437,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
 
   async function decideInternal(
     input: ToolAccessDecisionInput,
-    options: { cache?: ToolAccessDecisionCache; admittedInvocationId?: string },
+    options: { cache?: ToolAccessDecisionCache; admittedInvocationId?: string; sharedRateDecision?: ToolAccessDecision },
     consumedRateAdmissions: ConsumedRateAdmission[],
   ): Promise<ToolAccessDecision> {
     // A decision that consumes a rate limit can also record a trust-rule hit
@@ -1438,11 +1454,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       ? await admittedRateLimitAdmissions(ctx, options.admittedInvocationId) : [];
     const profileState = await effectiveProfiles(ctx, cache);
     const effectiveProfileIds = profileState.profiles.map((profile) => profile.id);
-    const permittedByProfile = profileState.profiles.some((profile) => {
-      const matchingEntries = profileState.entries.filter((entry) => entry.profileId === profile.id && profileEntryMatches(entry, ctx));
-      return !matchingEntries.some((entry) => entry.effect === "exclude")
-        && (profile.defaultAction === "allow" || matchingEntries.some((entry) => entry.effect === "include"));
-    });
+    const permittedByProfile = profileAllowsTool(profileState, ctx);
     const policies = await cachedRead(cache, `enabled-policies:${ctx.companyId}`, async () =>
       db.select().from(toolPolicies).where(and(eq(toolPolicies.companyId, ctx.companyId), eq(toolPolicies.enabled, true))).orderBy(asc(toolPolicies.priority), asc(toolPolicies.createdAt)));
     for (const policy of policies) {
@@ -1509,11 +1521,20 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
         }
         const versionHash = ratePolicyVersionHash(policy);
         if (admittedRates.some(admission => admission.policyId === policy.id && admission.versionHash === versionHash)) continue;
+        // Paired caller/target checks for one delegated test share a slot only
+        // when the exact policy version and counter bucket are identical.
+        const shared = options.sharedRateDecision?.policyExplanation?.consumedRateAdmissions;
+        const bucketKey = `${policy.id}:${rateBucket(rateLimitRule(policy)!, ctx)}`;
+        if (input.consumeRateLimit === true && Array.isArray(shared) && shared.some(item => isRecord(item)
+          && item.policyId === policy.id && item.versionHash === versionHash && item.bucketKey === bucketKey)) {
+          consumedRateAdmissions.push({ policyId: policy.id, versionHash, bucketKey });
+          continue;
+        }
         const state = await enforceRateLimit(policy, ctx, input.consumeRateLimit === true);
         if (state?.limited) {
           return decision("rate_limited", "rate_limited", "Tool access rate limit exceeded.", effectiveProfileIds, [policy.id], { rateLimitState: state, redactionPlan: redaction.redactionPlan, policyExplanation });
         }
-        if (state && input.consumeRateLimit === true) consumedRateAdmissions.push({ policyId: policy.id, versionHash });
+        if (state && input.consumeRateLimit === true) consumedRateAdmissions.push({ policyId: policy.id, versionHash, bucketKey: state.bucketKey });
         continue;
       }
       if (policy.policyType === "trust_rule") {
@@ -2161,6 +2182,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
 
   return {
     decide,
+    hasProfileAccess,
     writeAudit,
     recordInvocation,
     summarizeAndRedact,
