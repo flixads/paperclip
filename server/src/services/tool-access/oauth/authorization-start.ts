@@ -181,6 +181,23 @@ export function createOAuthAuthorizationStart(db: Db, dependencies: Dependencies
       // An agent has no browser session. Reuse the saved setup; the addressed
       // human starts provider authorization in their own authenticated session.
       // No provider state or credentials are issued by this handoff.
+      if (sourceTemplateKey === "google-workspace" && (input.workspaceServices || input.scopes)) {
+        await input.actor.managementContext.reauthorize();
+        const userId = input.actor.managementContext.responsibleUserId!;
+        await db.transaction(async tx => {
+          const [saved] = await tx.select().from(toolConnections).where(and(eq(toolConnections.id, connection.id), eq(toolConnections.companyId, companyId))).for("no key update");
+          if (!saved) throw notFound("Connection not found");
+          const rawOauth = saved.config.oauth;
+          const oauth = rawOauth && typeof rawOauth === "object" && !Array.isArray(rawOauth) ? rawOauth as Record<string, unknown> : {};
+          const prior = oauth.pendingWorkspaceServiceRequests;
+          const pending = prior && typeof prior === "object" && !Array.isArray(prior) ? prior as Record<string, unknown> : {};
+          const requested = { ...pending, [userId]: { requestedScopes, requestedAt: now().toISOString() } };
+          const config = { ...saved.config, oauth: { ...oauth, pendingWorkspaceServiceRequests: requested } };
+          const transportOauth = saved.transportConfig.oauth;
+          const transportConfig = { ...saved.transportConfig, oauth: { ...(transportOauth && typeof transportOauth === "object" && !Array.isArray(transportOauth) ? transportOauth : {}), pendingWorkspaceServiceRequests: requested } };
+          await tx.update(toolConnections).set({ config, transportConfig, updatedAt: now() }).where(eq(toolConnections.id, saved.id));
+        });
+      }
       const [company] = await db.select({ prefix: companies.issuePrefix }).from(companies).where(eq(companies.id, companyId));
       if (!company) throw notFound("Company not found");
       const destination = new URL(input.redirectUri);
