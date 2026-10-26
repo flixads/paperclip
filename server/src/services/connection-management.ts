@@ -1,5 +1,6 @@
-import { and, eq, or } from "drizzle-orm";
-import { agents, agentApiKeys, heartbeatRuns, runIdentityContexts, issues, projects, toolConnections, toolConnectionInstalls, toolProfiles, toolProfileEntries, toolProfileBindings, toolMcpGateways, aiConnectionPools, connectionGrants, routines, type Db } from "@paperclipai/db";
+import { and, eq, inArray, or } from "drizzle-orm";
+import { isUuidLike } from "@paperclipai/shared";
+import { agents, agentApiKeys, heartbeatRuns, runIdentityContexts, issues, projects, toolApplications, toolCatalogEntries, toolConnections, toolConnectionInstalls, toolProfiles, toolProfileEntries, toolProfileBindings, toolMcpGateways, aiConnectionPools, connectionGrants, routines, type Db } from "@paperclipai/db";
 import { forbidden } from "../errors.js";
 import { authorizationService, canActorReadIssuePrivacy, canActorReadProjectPrivacy, type AuthorizationActor, type AuthorizationDecision } from "./authorization.js";
 import { captureRunIdentity } from "./run-identity.js";
@@ -90,6 +91,9 @@ export function connectionManagementService(db: Db) {
     if (resource.profileId && !options.expandedProfile) {
       const [profile] = await db.select().from(toolProfiles).where(and(eq(toolProfiles.id, resource.profileId), eq(toolProfiles.companyId, resource.companyId)));
       if (!profile) throw forbidden("Profile is unavailable in this company");
+      // Managed installation profiles can be empty while their labels still
+      // identify the connection they administer.
+      if (profile.profileKey.startsWith("app:") && isUuidLike(profile.profileKey.slice(4))) referencedConnections.push(profile.profileKey.slice(4));
       const bindings = await db.select().from(toolProfileBindings).where(eq(toolProfileBindings.profileId, profile.id));
       for (const binding of bindings) {
         if (binding.targetType === "agent") expandedTargets.add(binding.targetId);
@@ -106,6 +110,34 @@ export function connectionManagementService(db: Db) {
       for (const gateway of linkedGateways) await authorizeBindingTarget(actor, action, resource, { targetType: "gateway", targetId: gateway.id }, options);
       const entries = await db.select().from(toolProfileEntries).where(eq(toolProfileEntries.profileId, profile.id));
       for (const entry of entries) if (entry.connectionId) referencedConnections.push(entry.connectionId);
+      const applicationIds = new Set(entries.flatMap(entry => entry.selectorType === "application" && entry.applicationId ? [entry.applicationId] : []));
+      const catalogIds = new Set(entries.flatMap(entry => entry.catalogEntryId ? [entry.catalogEntryId] : []));
+      if (catalogIds.size) {
+        const selected = await db.select({ id: toolCatalogEntries.id, connectionId: toolCatalogEntries.connectionId, applicationId: toolCatalogEntries.applicationId }).from(toolCatalogEntries)
+          .where(and(eq(toolCatalogEntries.companyId, resource.companyId), inArray(toolCatalogEntries.id, [...catalogIds])));
+        if (selected.length !== catalogIds.size) throw forbidden("Profile catalog selection is unavailable in this company");
+        for (const entry of selected) {
+          referencedConnections.push(entry.connectionId);
+          // New-tool review also covers other connections in the selected
+          // catalog entry's application, not just its original connection.
+          if (entry.applicationId) applicationIds.add(entry.applicationId);
+        }
+      }
+      if (applicationIds.size) {
+        const selected = await db.select({ id: toolApplications.id }).from(toolApplications).where(and(eq(toolApplications.companyId, resource.companyId), inArray(toolApplications.id, [...applicationIds])));
+        if (selected.length !== applicationIds.size) throw forbidden("Profile application selection is unavailable in this company");
+        const connections = await db.select({ id: toolConnections.id }).from(toolConnections).where(and(eq(toolConnections.companyId, resource.companyId), inArray(toolConnections.applicationId, [...applicationIds])));
+        connections.forEach(connection => referencedConnections.push(connection.id));
+      }
+      const toolNames = entries.flatMap(entry => entry.selectorType === "tool_name" && entry.toolName ? [entry.toolName] : []);
+      const riskLevels = entries.flatMap(entry => entry.selectorType === "risk_level" && entry.riskLevel ? [entry.riskLevel] : []);
+      if (profile.defaultAction === "allow" || toolNames.length || riskLevels.length) {
+        const selected = await db.selectDistinct({ connectionId: toolCatalogEntries.connectionId }).from(toolCatalogEntries).where(and(
+          eq(toolCatalogEntries.companyId, resource.companyId), eq(toolCatalogEntries.status, "active"),
+          profile.defaultAction === "allow" ? undefined : or(toolNames.length ? inArray(toolCatalogEntries.toolName, toolNames) : undefined, riskLevels.length ? inArray(toolCatalogEntries.riskLevel, riskLevels) : undefined),
+        ));
+        selected.forEach(entry => referencedConnections.push(entry.connectionId));
+      }
     }
     if (resource.connectionId) {
       const [connection] = await db.select().from(toolConnections).where(and(eq(toolConnections.id, resource.connectionId), eq(toolConnections.companyId, resource.companyId)));

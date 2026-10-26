@@ -2356,7 +2356,12 @@ function connectorEnrollmentPrincipal(req: Request): string {
     assertBoardOrAgent(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
-    res.json(await svc.getEffectiveProfilesForAgent(companyId, req.params.agentId as string));
+    const effective = await svc.getEffectiveProfilesForAgent(companyId, req.params.agentId as string);
+    const profiles = await filterConnectionManagementRows(db, req, "connections:profiles", effective.profiles, profile => ({ profileId: profile.id }));
+    const tools = await filterConnectionManagementRows(db, req, "connections:profiles", effective.allowedTools, tool => ({ connectionId: tool.connectionId }));
+    const installed = await filterConnectionManagementRows(db, req, "connections:profiles", effective.installedConnections, connection => ({ connectionId: connection.id }));
+    if (profiles.length !== effective.profiles.length || tools.length !== effective.allowedTools.length || installed.length !== effective.installedConnections.length) throw forbidden("Effective profile resources are unavailable to this delegated principal");
+    res.json(effective);
   });
 
   router.patch("/tool-profiles/:profileId", managementGuard("connections:profiles", "PATCH /tool-profiles/:profileId", { personal: true }), validate(updateToolProfileWithEntriesSchema), async (req, res) => {

@@ -96,6 +96,53 @@ describe("connection management with production default agents", () => {
     expect(profile, JSON.stringify(profile)).toMatchObject({ status: 201 });
   });
 
+  it("checks every saved profile selector and effective projection against personal account visibility", async () => {
+    const f = await fixture();
+    const first = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Owned profile account", transport: "mcp_remote", authKind: "none", config: { url: "https://1.1.1.1/mcp" } });
+    expect(first).toMatchObject({ status: 201 });
+    const second = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { applicationId: first.body.applicationId, name: "Private profile account", transport: "mcp_remote", authKind: "none", config: { url: "https://1.1.1.1/mcp" } });
+    expect(second, JSON.stringify(second)).toMatchObject({ status: 201, body: { applicationId: first.body.applicationId } });
+    const [known] = await server.db.insert(toolCatalogEntries).values({ companyId: f.companyId, applicationId: first.body.applicationId, connectionId: first.body.id, name: "known", toolName: "known", versionHash: "known" }).returning();
+    const profileIds: string[] = [];
+    const selectors = [
+      { selectorType: "application", applicationId: first.body.applicationId },
+      { selectorType: "catalog_entry", catalogEntryId: known.id },
+      { selectorType: "tool_name", toolName: "private_tool" },
+      { selectorType: "risk_level", riskLevel: "read" },
+    ];
+    for (const [index, entry] of selectors.entries()) {
+      const profile = await f.request("POST", `/companies/${f.companyId}/tools/profiles`, { profileKey: `privacy-${index}`, name: `Privacy ${index}`, entries: [entry] });
+      expect(profile, JSON.stringify(profile)).toMatchObject({ status: 201 });
+      profileIds.push(profile.body.id);
+    }
+    const all = await f.request("POST", `/companies/${f.companyId}/tools/profiles`, { profileKey: "privacy-all", name: "All tools", defaultAction: "allow", entries: [] });
+    expect(all).toMatchObject({ status: 201 });
+    profileIds.push(all.body.id);
+    expect(await f.request("POST", `/companies/${f.companyId}/tools/profiles/${profileIds[0]}/bind`, { targetType: "agent", targetId: f.agentId })).toMatchObject({ status: 201 });
+    await server.db.insert(toolCatalogEntries).values({ companyId: f.companyId, applicationId: first.body.applicationId, connectionId: second.body.id, name: "private_tool", toolName: "private_tool", description: "Private tool metadata", versionHash: "private", firstSeenAt: new Date(Date.now() + 60_000) });
+    expect(await f.request("GET", `/tool-profiles/${profileIds[1]}/new-tools`)).toMatchObject({ status: 200, body: { tools: [expect.objectContaining({ connectionName: "Private profile account", description: "Private tool metadata" })] } });
+    const effectivePath = `/companies/${f.companyId}/tools/profiles/effective/agents/${f.agentId}`;
+    expect((await f.request("GET", effectivePath)).body.allowedTools.some((tool: { toolName: string }) => tool.toolName === "private_tool")).toBe(true);
+    expect(await f.request("PUT", `/tool-connections/${second.body.id}/installs`, { installs: [{ targetType: "agent", targetId: f.agentId }] })).toMatchObject({ status: 200 });
+    await server.db.update(toolConnections).set({ credentialPolicy: "per_user", createdByUserId: randomUUID() }).where(eq(toolConnections.id, second.body.id));
+    for (const token of [f.key.token, f.jwt]) {
+      expect(await f.request("GET", `/tool-profiles/${profileIds[1]}/new-tools`, undefined, token)).toMatchObject({ status: 403 });
+      for (const id of profileIds) expect(await f.request("GET", `/tool-profiles/${id}/new-tools`, undefined, token)).toMatchObject({ status: 403 });
+      expect((await f.request("GET", `/companies/${f.companyId}/tools/profiles`, undefined, token)).body.profiles).toEqual([]);
+      expect(await f.request("GET", effectivePath, undefined, token)).toMatchObject({ status: 403 });
+    }
+    for (const [index, entry] of selectors.entries()) expect(await f.request("POST", `/companies/${f.companyId}/tools/profiles`, { profileKey: `private-attempt-${index}`, name: `Private attempt ${index}`, entries: [entry] })).toMatchObject({ status: 403 });
+    expect(await f.request("POST", `/companies/${f.companyId}/tools/profiles`, { profileKey: "private-attempt-all", name: "Private all", defaultAction: "allow", entries: [] })).toMatchObject({ status: 403 });
+    await server.db.delete(toolProfileBindings).where(and(eq(toolProfileBindings.companyId, f.companyId), eq(toolProfileBindings.targetType, "agent"), eq(toolProfileBindings.targetId, f.agentId)));
+    expect(await f.request("GET", effectivePath)).toMatchObject({ status: 403 });
+    await server.db.update(toolConnections).set({ createdByUserId: f.userId }).where(eq(toolConnections.id, second.body.id));
+    expect(await f.request("GET", effectivePath)).toMatchObject({ status: 200 });
+    await server.db.update(principalPermissionGrants).set({ scope: { connectionIds: [first.body.id] } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_profiles")));
+    for (const id of profileIds) expect(await f.request("GET", `/tool-profiles/${id}/new-tools?connectionId=${first.body.id}`)).toMatchObject({ status: 403 });
+    await server.db.update(principalPermissionGrants).set({ scope: { connectionIds: [first.body.id, second.body.id] } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_profiles")));
+    for (const id of profileIds) expect(await f.request("GET", `/tool-profiles/${id}/new-tools?connectionId=${first.body.id}`)).toMatchObject({ status: 200 });
+  });
+
   it("rechecks authority after remote endpoint validation before committing a connection update", async () => {
     const f = await fixture();
     const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Before validation", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });

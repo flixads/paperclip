@@ -121,7 +121,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       const selectors: Record<string, unknown>[] = [];
       const policyAudiences: Record<string, unknown>[] = [];
       if (Object.hasOwn(body, "selectors")) policyAudiences.push(body.selectors ?? {});
-      const selectorKeys = ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "routineId", "agentId", "targetAgentId", "targetType", "targetId", "agentIds", "connectionIds", "profileIds", "gatewayIds", "applicationIds", "catalogEntryIds", "projectIds", "issueIds", "routineId", "routineIds"];
+      const selectorKeys = ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "routineId", "agentId", "targetAgentId", "targetType", "targetId", "agentIds", "connectionIds", "profileIds", "gatewayIds", "applicationIds", "catalogEntryIds", "projectIds", "issueIds", "routineId", "routineIds", "selectorType", "toolName", "riskLevel", "defaultAction"];
       const seenSelectors = new Set<string>();
       const addSelector = (selected: Record<string, unknown>) => {
         assertBoundedManagementSelectors(selected);
@@ -210,6 +210,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       if (req.params.entryId) {
         const [entry] = await db.select().from(toolProfileEntries).where(eq(toolProfileEntries.id, uuid(req.params.entryId)));
         bindCompany(entry); profileId = entry.profileId; connectionId ??= entry.connectionId;
+        addSelector({ ...entry, ...body });
       }
       if (req.params.tokenId) {
         const [token] = await db.select().from(toolMcpGatewayTokens).where(eq(toolMcpGatewayTokens.id, uuid(req.params.tokenId)));
@@ -317,6 +318,14 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       }
       for (let index = 0; index < selectors.length; index++) {
         const selected = selectors[index];
+        const profileOperation = operation.includes("profile");
+        if (profileOperation && (selected.defaultAction === "allow" || selected.selectorType === "tool_name" && text(selected.toolName) || selected.selectorType === "risk_level" && text(selected.riskLevel))) {
+          const connections = await lookup(`profile-catalog:${JSON.stringify([selected.defaultAction, selected.selectorType, selected.toolName, selected.riskLevel])}`, () => db.selectDistinct({ connectionId: toolCatalogEntries.connectionId }).from(toolCatalogEntries).where(and(
+            eq(toolCatalogEntries.companyId, resource.companyId), eq(toolCatalogEntries.status, "active"),
+            selected.defaultAction === "allow" ? undefined : selected.selectorType === "tool_name" ? eq(toolCatalogEntries.toolName, String(selected.toolName)) : sql`${toolCatalogEntries.riskLevel} = ${String(selected.riskLevel)}`,
+          )).limit(1025));
+          connections.forEach(connection => addSelector(connection));
+        }
         // Expand each advertised plural selector. A permission over one member
         // cannot authorize a policy that also changes another member's access.
         for (const key of ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "routineId"] as const) {
@@ -342,8 +351,9 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
         }
         let selectedConnectionId = text(selected.connectionId);
         if (selected.catalogEntryId) {
-          const [entry] = await lookup(`catalog:${String(selected.catalogEntryId)}`, () => db.select().from(toolCatalogEntries).where(eq(toolCatalogEntries.id, String(selected.catalogEntryId))));
+          const [entry] = await lookup(`catalog:${String(selected.catalogEntryId)}`, () => db.select().from(toolCatalogEntries).where(eq(toolCatalogEntries.id, uuid(selected.catalogEntryId))));
           bindCompany(entry); selectedConnectionId = entry.connectionId;
+          if (profileOperation && entry.applicationId) addSelector({ applicationId: entry.applicationId });
         }
         if (selectedConnectionId && selectedConnectionId !== connectionId) {
           const [connection] = await lookup(`connection:${selectedConnectionId}`, () => db.select({ id: toolConnections.id, companyId: toolConnections.companyId, createdByUserId: toolConnections.createdByUserId,
