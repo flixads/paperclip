@@ -44,7 +44,9 @@ export function slackTestMessageService(db: Db, options: Options) {
         const request = {
           companyId: endpoint.companyId,
           actor: { actorType: "agent" as const, actorId: context.actor.agentId!, agentId: endpoint.assignedAgentId },
-          runContext: { heartbeatRunId: context.actor.runId ?? null },
+          runContext: { heartbeatRunId: context.workContext.runId, issueId: context.workContext.issueId,
+            projectId: context.workContext.projectId, originatingAgentId: context.actor.agentId! },
+          consumeRateLimit: true,
           request: { connectionId: endpoint.connectionId, providerType: "slack", applicationKey: "slack",
             toolName: "slack.send_message", upstreamToolName: "chat.postMessage", riskLevel: "write" as const,
             sideEffecting: true, arguments: { purpose: "setup_test", recipient: actor.userId } },

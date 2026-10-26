@@ -53,6 +53,7 @@ import {
 } from "./authz.js";
 import {
   badRequest,
+  notFound,
   forbidden,
   HttpError,
   tooManyRequests,
@@ -321,11 +322,14 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
     if (!(await assertEndpointAccess(req, res, service))) return;
     const reviewId = z.string().uuid().safeParse(req.params.reviewId);
     if (!reviewId.success) throw badRequest("Invalid review ID");
-    res.json(await github.review(endpointId(req), reviewId.data));
+    const review = await github.review(endpointId(req), reviewId.data);
+    const visible = await filterConnectionManagementRows(db, req, "connections:read", [review], row => ({ issueId: row.issueId }));
+    if (!visible.length) throw notFound("This review was not found in this connection");
+    res.json(visible[0]);
   });
   router.get("/chat-endpoints/:endpointId/github/reviews", managementGuard("connections:read", "GET /chat-endpoints/:endpointId/github/reviews"), async (req, res) => {
     if (!(await assertEndpointAccess(req, res, service))) return;
-    res.json(await github.reviews(endpointId(req)));
+    res.json(await filterConnectionManagementRows(db, req, "connections:read", await github.reviews(endpointId(req)), row => ({ issueId: row.issueId })));
   });
   router.get("/chat-endpoints/:endpointId/github/personal-connections", managementGuard("connections:read", "GET /chat-endpoints/:endpointId/github/personal-connections"), async (req, res) => {
     if (!(await assertEndpointAccess(req, res, service))) return;

@@ -1,5 +1,5 @@
 import { and, eq, or } from "drizzle-orm";
-import { agents, agentApiKeys, heartbeatRuns, runIdentityContexts, issues, projects, toolConnections, toolConnectionInstalls, toolProfiles, toolProfileEntries, toolProfileBindings, toolMcpGateways, aiConnectionPools, connectionGrants, type Db } from "@paperclipai/db";
+import { agents, agentApiKeys, heartbeatRuns, runIdentityContexts, issues, projects, toolConnections, toolConnectionInstalls, toolProfiles, toolProfileEntries, toolProfileBindings, toolMcpGateways, aiConnectionPools, connectionGrants, routines, type Db } from "@paperclipai/db";
 import { forbidden } from "../errors.js";
 import { authorizationService, canActorReadIssuePrivacy, canActorReadProjectPrivacy, type AuthorizationActor, type AuthorizationDecision } from "./authorization.js";
 import { captureRunIdentity } from "./run-identity.js";
@@ -97,10 +97,15 @@ export function connectionManagementService(db: Db) {
           const companyAgents = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, resource.companyId));
           companyAgents.forEach(agent => expandedTargets.add(agent.id));
         }
+        if (["issue", "routine", "gateway"].includes(binding.targetType)) {
+          await authorizeBindingTarget(actor, action, resource, binding, options);
+        }
         if (binding.targetType === "project") {
           await authorize(actor, action, { ...resource, projectId: binding.targetId }, { ...options, expandedProfile: true, gatewayContextChecked: options.gatewayContextChecked || Boolean(resource.gatewayId) });
         }
       }
+      const linkedGateways = await db.select({ id: toolMcpGateways.id }).from(toolMcpGateways).where(and(eq(toolMcpGateways.companyId, resource.companyId), eq(toolMcpGateways.profileId, profile.id)));
+      for (const gateway of linkedGateways) await authorizeBindingTarget(actor, action, resource, { targetType: "gateway", targetId: gateway.id }, options);
       const entries = await db.select().from(toolProfileEntries).where(eq(toolProfileEntries.profileId, profile.id));
       for (const entry of entries) if (entry.connectionId) referencedConnections.push(entry.connectionId);
     }
@@ -111,7 +116,8 @@ export function connectionManagementService(db: Db) {
         purpose: connection.connectionPurpose === "ai" ? "ai" : connection.connectionPurpose === "channel" ? "chat" : "tool",
         provider: typeof connection.config.sourceTemplateKey === "string" ? connection.config.sourceTemplateKey
           : typeof connection.config.provider === "string" ? connection.config.provider
-            : typeof (connection.config.ai as Record<string, unknown> | undefined)?.provider === "string" ? String((connection.config.ai as Record<string, unknown>).provider) : resource.provider,
+            : typeof (connection.config.ai as Record<string, unknown> | undefined)?.provider === "string" ? String((connection.config.ai as Record<string, unknown>).provider)
+              : typeof connection.transportConfig.sourceTemplateKey === "string" ? connection.transportConfig.sourceTemplateKey : null,
       };
       if (options.mutation ?? action !== "connections:read") {
         const installs = await db.select().from(toolConnectionInstalls).where(eq(toolConnectionInstalls.connectionId, connection.id));
@@ -153,6 +159,16 @@ export function connectionManagementService(db: Db) {
         if (!grant) throw forbidden("This personal connection is unavailable to the responsible user");
       }
     }
+    if (resource.routineId) {
+      const [routine] = await db.select().from(routines).where(and(eq(routines.id, resource.routineId), eq(routines.companyId, resource.companyId)));
+      if (!routine) throw forbidden("Routine is unavailable in this company");
+      resource = { ...resource, projectId: routine.projectId, issueId: routine.parentIssueId };
+      if (routine.assigneeAgentId) expandedTargets.add(routine.assigneeAgentId);
+      else if (options.mutation ?? action !== "connections:read") {
+        const rows = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, resource.companyId));
+        rows.forEach(row => expandedTargets.add(row.id));
+      }
+    }
     if (actor.type === "agent") {
       if (resource.projectId) {
         const [project] = await db.select().from(projects).where(and(eq(projects.id, resource.projectId), eq(projects.companyId, resource.companyId)));
@@ -161,6 +177,18 @@ export function connectionManagementService(db: Db) {
       if (resource.issueId) {
         const [issue] = await db.select().from(issues).where(and(eq(issues.id, resource.issueId), eq(issues.companyId, resource.companyId)));
         if (!issue || !(await canActorReadIssuePrivacy(db, actor, issue))) throw forbidden("Task is unavailable to this delegated principal");
+        if (options.mutation ?? action !== "connections:read") {
+          if (issue.assigneeAgentId) expandedTargets.add(issue.assigneeAgentId);
+          else {
+            const rows = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, resource.companyId));
+            rows.forEach(row => expandedTargets.add(row.id));
+          }
+        }
+        if (issue.projectId && issue.projectId !== resource.projectId) {
+          const [project] = await db.select().from(projects).where(and(eq(projects.id, issue.projectId), eq(projects.companyId, resource.companyId)));
+          if (!project || !(await canActorReadProjectPrivacy(db, actor, project))) throw forbidden("Task project is unavailable to this delegated principal");
+        }
+        resource = { ...resource, projectId: resource.projectId ?? issue.projectId };
         if (issue.workMode === "skill_test" || ((options.mutation ?? action !== "connections:read") && issue.workMode !== "standard")) throw forbidden("Connection changes require a standard task");
       }
     }
@@ -217,6 +245,29 @@ export function connectionManagementService(db: Db) {
     return context;
   }
 
+  async function authorizeBindingTarget(actor: AuthorizationActor, action: ConnectionManagementAction,
+    resource: ConnectionManagementResource, binding: { targetType: string; targetId: string },
+    options: NonNullable<Parameters<typeof authorize>[3]> = {}): Promise<ConnectionManagementContext> {
+    let resolved = { ...resource };
+    const checkOptions = { ...options, expandedProfile: true };
+    if (binding.targetType === "issue") resolved.issueId = binding.targetId;
+    else if (binding.targetType === "routine") resolved.routineId = binding.targetId;
+    else if (binding.targetType === "gateway") {
+      const [gateway] = await db.select().from(toolMcpGateways).where(and(eq(toolMcpGateways.id, binding.targetId), eq(toolMcpGateways.companyId, resource.companyId)));
+      if (!gateway) throw forbidden("Binding gateway is unavailable in this company");
+      resolved = { ...resolved, gatewayId: gateway.id, projectId: gateway.projectId, issueId: gateway.issueId };
+      checkOptions.gatewayContextChecked = true;
+      const targets = new Set(options.targetAgentIds ?? []);
+      if (gateway.agentId) targets.add(gateway.agentId);
+      else {
+        const rows = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, resource.companyId));
+        rows.forEach(row => targets.add(row.id));
+      }
+      checkOptions.targetAgentIds = [...targets];
+    } else throw forbidden("Unsupported profile binding target");
+    return authorize(actor, action, resolved, checkOptions);
+  }
+
   async function capability(...args: Parameters<typeof authorize>) {
     try {
       const context = await authorize(args[0], args[1], args[2], { ...args[3], capabilityProbe: true });
@@ -227,7 +278,7 @@ export function connectionManagementService(db: Db) {
       return { allowed: false, reason: error.message, operation: args[2].operation };
     }
   }
-  return { authorize, capability };
+  return { authorize, authorizeBindingTarget, capability };
 }
 
 /** A pending provider login can finish after a successful yielding run. This
