@@ -123,3 +123,6 @@ The implementation was rebased onto `a1f77821b9cd5c9c846fdf7a0fa5cc620ad2b6bb`. 
 
 - A subsequent route review found a board-only owner helper left behind in the sandbox device-login path. It now uses the shared connection authority while keeping the responsible user as immutable session owner. A focused assembled-server case passed for actual key/JWT reads, cancellation, strict start validation, and another-owner denial. This fixture does not launch a sandbox/provider process; existing login service fixtures cover that contract.
 - Map review also corrected unsupported MCP GET handlers (405, POST required), restored private voice/phone consent boundaries and existing chat provenance notes, and distinguished saved device-session HTTP evidence from provider authentication.
+
+- Final assembled-server acceptance after the device-login fix: **32 scenarios passed** in a fresh PostgreSQL database.
+- Review found that the top-level Apps connect route rejected an `aiLogin`-only handoff before rendering its saved login panel. The new route-policy test failed before the fix; the route now admits a non-empty saved-login ID, leaving owner/session validation to the existing server and panel. Empty IDs remain rejected. The prior component-only tests did not cover this entry gate.
