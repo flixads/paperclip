@@ -198,8 +198,16 @@ Active remote process supervision distinguishes a failed health read from a
 confirmed exit. The [executor tests](../../server/src/services/native-runtime/native-session-executor.test.ts)
 exercise timeout recovery with a real listening process, unchanged ownership,
 and rejected identity evidence. The Runner restart tests require positive exit
-evidence before replacement. This coverage does not prove recovery of a
+evidence before replacement. The executor regressions also retire a real child
+during its metadata read, keep unknown adopted-process ownership held, and reject
+launch before detachment when Node is unavailable. The diagnostic tests cover
+permission failures and generation-bound zombie receipts. This coverage does not prove recovery of a
 historical retained sandbox or behavior during a live provider outage.
+The [transport regression](../../packages/paperclip-runner/src/live/runnerd-codex-transport.test.ts)
+also retains a real authenticated Runner and its journal when its close probe
+rejects, without signalling it, checkpointing it, or starting a replacement.
+The failed close still retires its local connections, event timers and
+notification stream. Repeated close cannot report successful retirement.
 
 For a release change during a remote provider session, verify that reattachment
 uses the controller's admitted pack manifest and runner digest. Check useful
