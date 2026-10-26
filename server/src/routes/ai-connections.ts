@@ -229,13 +229,13 @@ export function aiConnectionRoutes(db: Db, options: Parameters<typeof supportsLo
       throw unprocessable("Invalid agent ID");
     res.json({
       currentUserId,
-      pools: await pools.selectable(companyId, currentUserId),
+      pools: await filterConnectionManagementRows(db, req, "connections:read", await pools.selectable(companyId, currentUserId), pool => ({ connectionId: pool.id })),
       canManageConnections: await canManageAiConnections(db, req, companyId),
-      connections: await service.list(
+      connections: await filterConnectionManagementRows(db, req, "connections:read", await service.list(
         companyId,
         currentUserId,
         agentId as string | undefined,
-      ),
+      ), account => ({ connectionId: account.id })),
     } satisfies AiConnectionList);
   });
   router.get(
