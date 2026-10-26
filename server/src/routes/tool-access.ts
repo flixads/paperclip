@@ -2159,6 +2159,7 @@ function connectorEnrollmentPrincipal(req: Request): string {
     await assertBoardAnyToolPermission(req, connection.companyId, ["tools:use", "tools:manage_connections"]);
     try {
       const status = await options.toolGateway.getTestCallStatus({
+        actor: req.actor,
         companyId: connection.companyId,
         connectionId: connection.id,
         actionRequestId: req.params.actionRequestId as string,
