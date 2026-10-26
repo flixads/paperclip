@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAppStoreDefinition } from "@paperclipai/shared";
 import type { AggregatorAppSnapshot, AggregatorAppsResponse } from "@paperclipai/shared/aggregator-apps";
+import { ApiError } from "@/api/client";
 import { queryKeys } from "@/lib/queryKeys";
 import { rememberSkillSourceReturn, skillSourceReturnPath } from "@/lib/skill-source-connect-return";
 import { AppDetail } from "./AppDetail";
@@ -1427,6 +1428,33 @@ describe("AppDetail", () => {
     await renderAppDetail();
     expect(container.textContent).toContain("Retry access");
     expect(container.textContent).not.toContain("Reconnect required");
+  });
+
+  it("links a failed GitHub refresh to the suspended installation's settings", async () => {
+    mockParams.tab = "permissions";
+    const message = "The Paperclip GitHub installation is suspended. Unsuspend it on GitHub before refreshing access.";
+    getConnectionMock.mockResolvedValue(connection({
+      authKind: "oauth", healthStatus: "error", requiresReauthorization: false, healthMessage: message,
+    }));
+    checkConnectionHealthMock.mockRejectedValue(new ApiError(message, 422, {
+      error: message,
+      code: "github_installation_required",
+      details: {
+        code: "github_installation_required",
+        managementUrl: "https://github.com/organizations/paperclipai/settings/installations/101",
+      },
+    }));
+    await renderAppDetail();
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.trim() === "Retry access")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReact();
+
+    expect(checkConnectionHealthMock).toHaveBeenCalledWith("conn-1");
+    expect(container.querySelector('a[href="https://github.com/organizations/paperclipai/settings/installations/101"]')?.textContent)
+      .toBe("Open installation settings on GitHub");
   });
 
   it("shows terminal OAuth failures as reconnect-required sign-in", async () => {

@@ -30,6 +30,7 @@ import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useToast } from "@/context/ToastContext";
 import { queryKeys } from "@/lib/queryKeys";
 import { consumeSkillSourceReturn } from "@/lib/skill-source-connect-return";
+import { ApiError } from "@/api/client";
 import { toolsApi } from "@/api/tools";
 import { agentsApi } from "@/api/agents";
 import { accessApi } from "@/api/access";
@@ -469,12 +470,19 @@ function StandardAppDetail({ renderActions, renderAgentSettings, renderConnectio
         tone: "success",
       });
     },
-    onError: (error) => pushToast({
-      title: "Couldn't refresh GitHub access",
-      body: error instanceof Error ? error.message : "Please try again.",
-      tone: "error",
-    }),
+    onError: (error) => {
+      // The failed check is saved on the connection; refetch so the banner
+      // shows it next to any GitHub recovery link.
+      queryClient.invalidateQueries({ queryKey: queryKeys.tools.connection(connectionId) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.apps.attention(selectedCompanyId!) });
+      pushToast({
+        title: "Couldn't refresh GitHub access",
+        body: error instanceof Error ? error.message : "Please try again.",
+        tone: "error",
+      });
+    },
   });
+  const githubRecoveryUrl = githubAccessRecoveryUrl(refreshGitHubAccess.error);
 
   const apply = (mutate: {
     enabled?: Set<string>;
@@ -594,6 +602,11 @@ function StandardAppDetail({ renderActions, renderAgentSettings, renderConnectio
       {status.tone === "attention" && connection.requiresReauthorization === false && (
         <div role="status">
           <p>{connection.healthMessage || "GitHub access could not be checked. Try again."}</p>
+          {githubRecoveryUrl ? (
+            <Button asChild variant="outline">
+              <a href={githubRecoveryUrl} target="_blank" rel="noreferrer">Open installation settings on GitHub</a>
+            </Button>
+          ) : null}
           <Button variant="outline" disabled={refreshGitHubAccess.isPending} onClick={() => refreshGitHubAccess.mutate()}>
             Retry access
           </Button>
@@ -877,6 +890,19 @@ function unverifiedRemoteHost(connection: ToolConnection): string | null {
 
   try {
     return new URL(value).host || null;
+  } catch {
+    return null;
+  }
+}
+
+/** GitHub page that resolves a failed Refresh access, such as Unsuspend. */
+function githubAccessRecoveryUrl(error: unknown): string | null {
+  if (!(error instanceof ApiError) || !error.body || typeof error.body !== "object") return null;
+  const details = (error.body as { details?: { code?: unknown; managementUrl?: unknown } }).details;
+  if (details?.code !== "github_installation_required" || typeof details.managementUrl !== "string") return null;
+  try {
+    const url = new URL(details.managementUrl);
+    return url.protocol === "https:" && url.hostname.toLowerCase() === "github.com" ? url.toString() : null;
   } catch {
     return null;
   }
