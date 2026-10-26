@@ -1832,6 +1832,24 @@ replacement. Missing or conflicting identity evidence, failed reads, and an
 exhausted probe budget retain the existing ownership and recovery safeguards.
 They must not launch a competing listener or overwrite the original marker.
 
+Remote process verification uses one Node probe for liveness, command identity,
+and the saved Linux boot identity and start ticks. If metadata disappears during
+the probe, only a fresh `ESRCH` response confirms exit. A zombie also confirms
+exit when its generation matches the saved marker. Permission errors, unreadable
+metadata, and changed generations remain uncertain. Adopted-runner checks reject
+that uncertainty rather than returning the same `false` value as a confirmed
+exit. Launch checks that Node can run the probe before creating launch state or
+detaching the process. These receipts do not release historical recovery holds
+or prove that workspace files and provider state have been saved.
+The transport propagates rejected adopted-process checks through close and
+command waits. It must not turn a rejected check into a positive exit observation.
+When a process check rejects close, the transport retires its local controller,
+timers and notification queue without signalling the remote Runner or replacing
+its checkpoint. Repeated close retains the same failed ownership result.
+Copilot profile 62 binds this shared transport implementation. Profile 61 remains
+decodable for recovery, but exact launch admission uses the current profile and
+digest. Earlier live qualification results keep their original profile identity.
+
 Healthy native warm turns retain their runner and provider processes. After a
 controller crash, continuation can recover a completed remote session from its
 saved checkpoint and exact sandbox process identity. The prior controller must
