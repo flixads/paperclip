@@ -119,6 +119,8 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       const extraResources: ConnectionManagementResource[] = [];
       const bindingTargets: { targetType: string; targetId: string }[] = [];
       const selectors: Record<string, unknown>[] = [];
+      const policyAudiences: Record<string, unknown>[] = [];
+      if (Object.hasOwn(body, "selectors")) policyAudiences.push(body.selectors ?? {});
       const selectorKeys = ["connectionId", "profileId", "gatewayId", "applicationId", "catalogEntryId", "projectId", "issueId", "routineId", "agentId", "targetAgentId", "targetType", "targetId", "agentIds", "connectionIds", "profileIds", "gatewayIds", "applicationIds", "catalogEntryIds", "projectIds", "issueIds", "routineId", "routineIds"];
       const seenSelectors = new Set<string>();
       const addSelector = (selected: Record<string, unknown>) => {
@@ -149,11 +151,11 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       for (const id of new Set(Array.isArray(body.policyIds) ? body.policyIds : [])) {
         const [policy] = await db.select().from(toolPolicies).where(eq(toolPolicies.id, uuid(id)));
         if (policy && companyId && policy.companyId !== companyId && req.actor.type === "board") throw new HttpError(422, "Policies must belong to this company");
-        bindCompany(policy); addSelector(policy.selectors);
+        bindCompany(policy); addSelector(policy.selectors); policyAudiences.push(policy.selectors);
       }
       if (req.params.policyId) {
         const [policy] = await db.select().from(toolPolicies).where(eq(toolPolicies.id, uuid(req.params.policyId)));
-        bindCompany(policy); addSelector(policy.selectors);
+        bindCompany(policy); addSelector(policy.selectors); policyAudiences.push(policy.selectors);
       }
       if (action === "connections:runtime" && (req.params.slotId || req.params.id)) {
         const [slot] = await db.select().from(toolRuntimeSlots).where(eq(toolRuntimeSlots.id, uuid(req.params.slotId ?? req.params.id)));
@@ -309,7 +311,7 @@ export function connectionManagementGuard(db: Db, purpose: "tool" | "chat" | "ai
       for (const member of Array.isArray(body.config?.members) ? body.config.members : []) addSelector(member.binding ?? {});
       for (const binding of Array.isArray(body.bindings) ? body.bindings : []) addSelector(binding);
       if (req.method !== "GET" && (operation.includes("/tools/policies") || operation.includes("/trust-rules/")) &&
-          selectors.some(selected => !selected.agentId && !(Array.isArray(selected.agentIds) && selected.agentIds.length))) {
+          (policyAudiences.length ? policyAudiences : [{}]).some(selected => !selected.agentId && !(Array.isArray(selected.agentIds) && selected.agentIds.length))) {
         const companyAgents = await db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, companyId));
         companyAgents.forEach(agent => targets.add(agent.id));
       }

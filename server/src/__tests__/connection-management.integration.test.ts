@@ -1,4 +1,4 @@
-import { defaultGitHubReviewPolicy, SLACK_CHAT_BOT_SCOPES, SLACK_BOT_TOOL_SCOPES } from "@paperclipai/shared";
+import { googleWorkspaceSelectedScopes, defaultGitHubReviewPolicy, SLACK_CHAT_BOT_SCOPES, SLACK_BOT_TOOL_SCOPES } from "@paperclipai/shared";
 import { randomUUID, generateKeyPairSync } from "node:crypto";
 import { join } from "node:path";
 import { createServer } from "node:http";
@@ -321,6 +321,21 @@ describe("connection management with production default agents", () => {
     expect(await f.request("GET", `${path}/${hidden.id}`)).toMatchObject({ status: 404 });
   });
 
+  it("keeps narrow policy create, update, reorder, and delete within their actual audiences", async () => {
+    const f = await fixture();
+    const other = (await server.db.select({ id: agents.id }).from(agents).where(eq(agents.companyId, f.companyId))).find(agent => agent.id !== f.agentId)!;
+    await server.db.update(principalPermissionGrants).set({ scope: { targetAgentIds: [f.agentId] } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "agents:configure")));
+    const path = `/companies/${f.companyId}/tools/policies`;
+    const created = await f.request("POST", path, { name: "Own target rule", policyType: "allow", selectors: { agentId: f.agentId } });
+    expect(created, JSON.stringify(created)).toMatchObject({ status: 201 });
+    expect(await f.request("PATCH", `${path}/${created.body.id}`, { description: "Retain the target" })).toMatchObject({ status: 200 });
+    expect(await f.request("POST", `${path}/reorder`, { policyIds: [created.body.id] })).toMatchObject({ status: 200 });
+    expect(await f.request("PATCH", `${path}/${created.body.id}`, { selectors: {} })).toMatchObject({ status: 403 });
+    expect(await f.request("PATCH", `${path}/${created.body.id}`, { selectors: { agentId: other.id } })).toMatchObject({ status: 403 });
+    expect(await f.request("POST", path, { name: "Company rule", policyType: "allow", selectors: {} })).toMatchObject({ status: 403 });
+    expect(await f.request("DELETE", `${path}/${created.body.id}`)).toMatchObject({ status: 200 });
+  });
+
   it("bounds and deduplicates resource selectors before per-resource database work", async () => {
     const f = await fixture();
     const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Bounded selector", transport: "mcp_remote", authKind: "none", transportConfig: { url: "https://1.1.1.1/mcp" } });
@@ -435,6 +450,25 @@ describe("connection management with production default agents", () => {
     ]));
     const activity = await server.db.select().from(activityLog).where(eq(activityLog.entityId, grant.id));
     expect(activity).toEqual(expect.arrayContaining([expect.objectContaining({ actorType: "agent", actorId: f.agentId, responsibleUserId: f.userId })]));
+  });
+
+  it("saves the addressed user's Google service choices before handing off browser consent", async () => {
+    const f = await fixture();
+    const created = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Selected Google services", transport: "mcp_remote", authKind: "oauth", credentialPolicy: "per_user", status: "draft",
+      config: { url: "https://1.1.1.1/mcp", sourceTemplateKey: "google-workspace", connectionMethodKey: "paperclip-workspace" } });
+    expect(created, JSON.stringify(created)).toMatchObject({ status: 201 });
+    const services = { gmail: "read" as const };
+    const started = await f.request("POST", `/tools/oauth/${created.body.id}/start`, { asCurrentUser: true, workspaceServices: services });
+    expect(started, JSON.stringify(started)).toMatchObject({ status: 200, body: { expiresAt: null, requiredUserAction: { userId: f.userId } } });
+    const [saved] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.id));
+    expect((saved.config.oauth as { pendingWorkspaceServiceRequests: Record<string, unknown> }).pendingWorkspaceServiceRequests).toEqual({
+      [f.userId]: { requestedScopes: googleWorkspaceSelectedScopes(services), requestedAt: expect.any(String) },
+    });
+    const restored = await f.request("GET", `/tool-connections/${saved.id}`);
+    expect(restored).toMatchObject({ status: 200, body: { config: { oauth: { pendingWorkspaceServiceRequests: {
+      [f.userId]: { requestedScopes: googleWorkspaceSelectedScopes(services) },
+    } } } } });
+    expect(await server.db.select().from(toolOauthStates).where(eq(toolOauthStates.connectionId, saved.id))).toHaveLength(0);
   });
 
   it("discovers and invokes connection APIs through default production native bindings", async () => {
