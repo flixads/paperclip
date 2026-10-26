@@ -18,6 +18,7 @@ import { getServerAdapter, registerServerAdapter, unregisterServerAdapter } from
 import { configureAgentLifecycle } from "../services/agent-lifecycle.js";
 import { agentService } from "../services/agents.js";
 import { accessService } from "../services/access.js";
+import { secretService } from "../services/secrets.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
 import { PaperclipRunnerToolAuthority } from "../services/native-runtime/paperclip-runner-tool-authority.js";
 
@@ -652,9 +653,33 @@ describe("connection management with production default agents", () => {
     };
     try {
       const created = await f.request("POST", `/companies/${f.companyId}/chat-endpoints`, { provider: "slack", assignedAgentId: f.agentId, slackSetupMethod: "manual" });
-      const configured = await f.request("POST", `/chat-endpoints/${created.body.id}/setup`, { action: "configure", credentials: { botToken: "xoxb-fixture-token", signingSecret: "fixture-signing-secret" } });
+      const setupPath = `/chat-endpoints/${created.body.id}/setup`;
+      const cookie = await server.humanSession(f.userId);
+      const configuredResponse = await fetch(server.apiUrl + "/api" + setupPath, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "configure", credentials: { botToken: "xoxb-fixture-token", signingSecret: "fixture-signing-secret" } }) });
+      const configured = { status: configuredResponse.status, body: await configuredResponse.json() };
       expect(configured, JSON.stringify(configured)).toMatchObject({ status: 200 });
       expect(JSON.stringify(configured.body)).not.toContain("xoxb-fixture-token");
+      const [before] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      const botTokenRef = before.credentialSecretRefs.find(ref => ref.configPath === "credentials.botToken")!;
+      const rebound = before.credentialSecretRefs.map(ref => ref.configPath === "credentials.signingSecret" ? { ...ref, secretId: botTokenRef.secretId } : ref);
+      expect(await f.request("PATCH", `/tool-connections/${created.body.connectionId}`, { credentialSecretRefs: rebound }, f.jwt))
+        .toMatchObject({ status: 403, body: { code: "chat_endpoint_credentials_require_setup" } });
+      for (const action of ["reconnect", "configure"] as const) for (const token of [f.key.token, f.jwt]) {
+        const chosen = "agent-chosen-webhook-key";
+        const handoff = await f.request("POST", setupPath, { action, credentials: { signingSecret: chosen } }, token);
+        expect(handoff, JSON.stringify(handoff)).toMatchObject({ status: 200, body: { status: "needs_user_action", endpointId: created.body.id,
+          requiredUserAction: { kind: "enter_credentials", userId: f.userId, resource: { id: created.body.id } } } });
+        expect(JSON.stringify(handoff.body)).not.toContain(chosen);
+        const [after] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+        expect(after.credentialSecretRefs).toEqual(before.credentialSecretRefs);
+        const signing = after.credentialSecretRefs.find(ref => ref.configPath === "credentials.signingSecret")!;
+        expect(await secretService(server.db).resolveSecretValue(f.companyId, signing.secretId, "latest", {
+          accessContext: { consumerType: "system", consumerId: "integration-fixture", actorType: "system" },
+        })).toBe("fixture-signing-secret");
+      }
+      // Ordinary write-only bot-token repair remains delegated under current authority.
+      expect(await f.request("POST", setupPath, { action: "reconnect", credentials: { botToken: "xoxb-fixture-token" } }, f.jwt)).toMatchObject({ status: 200, body: { id: created.body.id } });
       // Identity is a provider fixture; production HTTP admission and policy remain real.
       const [principal] = await server.db.insert(chatExternalPrincipals).values({ companyId: f.companyId, provider: "slack", providerAccountId: "TFIXTURE", externalId: "UHUMAN", isBot: false }).returning();
       await server.db.insert(chatIdentityLinks).values({ companyId: f.companyId, endpointId: created.body.id, principalId: principal.id, paperclipUserId: f.userId, status: "linked", confirmedAt: new Date() });

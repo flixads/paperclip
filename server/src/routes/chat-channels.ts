@@ -433,9 +433,15 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
     validate(configureChatEndpointSchema),
     async (req, res) => {
       if (!(await assertEndpointManagementAccess(req, res))) return;
-      res.json(
-        await service.configure(endpointId(req), req.body, actorUserId(req), connectionRequestContext(req)),
-      );
+      res.set("Cache-Control", "no-store");
+      try {
+        res.json(await service.configure(endpointId(req), req.body, actorUserId(req), connectionRequestContext(req)));
+      } catch (error) {
+        if (req.actor.type !== "agent" || !(error instanceof HttpError) || error.status !== 403
+          || !error.details || typeof error.details !== "object" || !("code" in error.details)
+          || error.details.code !== "chat_endpoint_credential_entry_requires_human") throw error;
+        res.json(await setupHandoff(req, "The responsible user must enter provider verification credentials in the saved setup.", "enter_credentials"));
+      }
     },
   );
 

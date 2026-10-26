@@ -4592,6 +4592,12 @@ export function toolAccessService(
       managementContext?: ConnectionManagementContext,
     ): Promise<ToolConnection> => {
       const existing = await getConnectionRow(connectionId);
+      if (managementContext?.actor.type === "agent" && existing.connectionPurpose === "channel"
+        && (input.credentialRefs !== undefined || input.credentialSecretRefs !== undefined)) {
+        throw forbidden("Use chat endpoint setup to change channel credentials; verification keys require human entry", {
+          code: "chat_endpoint_credentials_require_setup",
+        });
+      }
       if (existing.connectionPurpose === "ai" && (input.config || input.transportConfig || input.credentialRefs || input.credentialSecretRefs || (input.credentialPolicy && input.credentialPolicy !== existing.credentialPolicy))) throw badRequest("Use AI account reconnect to change credentials. Provider, sign-in method, and ownership cannot be changed.");
       const config = normalizeGoogleSheetsConnectionConfig(
         input.config ?? input.transportConfig ?? existing.config,

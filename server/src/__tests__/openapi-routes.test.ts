@@ -754,6 +754,9 @@ describe("openapi routes", () => {
     ).toEqual(["current", "stale", "unverified"]);
 
     const setup = spec.paths["/api/chat-endpoints/{endpointId}/setup"].post;
+    const setupResponse = setup.responses["200"].content["application/json"].schema;
+    expect((setupResponse.oneOf ?? setupResponse.anyOf)[1].properties.requiredUserAction.properties.kind.enum).toEqual(["enter_credentials"]);
+    expect(setup.description).toContain("without changing credentials");
     expect(
       setup.requestBody.content["application/json"].schema.properties.action
         .enum,

@@ -62,6 +62,7 @@ import {
 import {
   badRequest,
   conflict,
+  forbidden,
   notFound,
   unprocessable,
 } from "../../errors.js";
@@ -143,6 +144,15 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
             unsupportedKeys,
           },
         );
+      }
+      // These keys establish provider authentication or inbound trust. They
+      // must come from the human setup step or a verified provider handoff.
+      if (managementContext?.actor.type === "agent" && suppliedCredentialKeys.some(
+        key => ["signingSecret", "webhookSecret", "privateKey", "clientSecret", "projectSecret"].includes(key),
+      )) {
+        throw forbidden("The responsible user must enter provider verification credentials in the saved setup", {
+          code: "chat_endpoint_credential_entry_requires_human",
+        });
       }
     }
     return withCredentialMutationLease(record.endpoint, (credentialLease) =>
