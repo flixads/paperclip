@@ -336,18 +336,32 @@ export function createChatActivity(db: Db, options: ChatActivityOptions) {
     // An endpoint manager may still lack access to individual private tasks.
     let visibleIds: Set<string> | undefined;
     if (managementContext?.actor.type === "agent") {
-      const conversations = await db.select().from(chatConversations).where(eq(chatConversations.endpointId, endpointId));
-      const visibleConversations = new Set<string>();
-      for (const conversation of conversations) {
-        const decision = await connectionManagementService(db).capability(managementContext.actor, "connections:audit",
-          { ...managementContext.resource, issueId: conversation.issueId }, { mutation: false });
-        if (decision.allowed) visibleConversations.add(conversation.id);
-      }
-      const visible = (row: { id: string; conversationId: string | null }) => !row.conversationId || visibleConversations.has(row.conversationId);
-      visibleIds = new Set([
+      const activityRows = [
         ...deliveries, ...publications, ...slashActions, ...providerEffects,
         ...githubIngressFailures, ...slackSessionActions, ...githubRecoveries.map(row => row.action),
-      ].filter(visible).map(row => row.id));
+      ];
+      // Each source is page-bounded above. Endpoint history does not contribute
+      // authorization work unless a conversation appears in these candidates.
+      const conversationIds = [...new Set(activityRows.flatMap(row => row.conversationId ? [row.conversationId] : []))];
+      const conversations = conversationIds.length ? await db.select({ id: chatConversations.id, issueId: chatConversations.issueId }).from(chatConversations).where(and(
+        eq(chatConversations.companyId, managementContext.resource.companyId),
+        eq(chatConversations.endpointId, endpointId), inArray(chatConversations.id, conversationIds),
+      )) : [];
+      const visibleConversations = new Set<string>();
+      const issueVisibility = new Map<string, boolean>();
+      const management = connectionManagementService(db);
+      for (const conversation of conversations) {
+        let allowed = issueVisibility.get(conversation.issueId);
+        if (allowed === undefined) {
+          const decision = await management.capability(managementContext.actor, "connections:audit",
+            { ...managementContext.resource, issueId: conversation.issueId }, { mutation: false, readContext: managementContext });
+          allowed = decision.allowed;
+          issueVisibility.set(conversation.issueId, allowed);
+        }
+        if (allowed) visibleConversations.add(conversation.id);
+      }
+      const visible = (row: { id: string; conversationId: string | null }) => !row.conversationId || visibleConversations.has(row.conversationId);
+      visibleIds = new Set(activityRows.filter(visible).map(row => row.id));
       githubRecoveryScans.forEach(row => visibleIds!.add(row.id));
     }
     return [
