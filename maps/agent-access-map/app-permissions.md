@@ -254,10 +254,10 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 API: `present` — `POST /api/tool-connections/{connectionId}/test-calls`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:use`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Policy: `tools:use`, responsible-user credential access and target-agent authority; authenticated task/project policies apply before dispatch and after approval. A successful yielded run may continue only while current user, agent, task, and grant authority remain valid.
+Evidence: `verified` — [assembled-server integration](../../server/src/__tests__/connection-management.integration.test.ts), actual bearer/session authentication, persisted PostgreSQL state, and deterministic local MCP/provider fixtures.
+Verification: `passed` — 25-scenario fixture suite on a fresh isolated PostgreSQL database, including scoped denial, approved continuation, revocation, cancellation and replay. No live provider qualification.
+Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `get-tool-connections-test-calls`
 
