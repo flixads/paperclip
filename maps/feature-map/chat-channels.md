@@ -29,6 +29,8 @@ Message the configured bot/address from its external provider and follow the cor
 
 ### `endpoint-management`
 
+Delegated setup can save ordinary bot tokens and API keys. Provider verification keys require the addressed human credential-entry step or verified provider provisioning. Generic setup returns the saved handoff without changing those keys, and generic connection updates cannot replace channel credential references. The actual-auth Slack fixture covers both guards and permitted bot-token repair; live provider repair remains separately qualified.
+
 Open `/apps/chat/:endpointId/settings` and the endpoint’s other available tabs; identity confirmation uses `/chat-identity/confirm`.
 
 ### `outbound-agentmail`

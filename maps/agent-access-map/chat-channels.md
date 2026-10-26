@@ -265,10 +265,10 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 ### `post-chat-endpoints-setup`
 
 API: `present` — `POST /api/chat-endpoints/{endpointId}/setup`; JSON REST.
-Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
+Agent access: `available` — agent REST and default native `search_api` / `call_api`. Agent-supplied signing/webhook secrets, private keys, client secrets, and project secrets return a saved human credential-entry handoff. Authorized write-only bot-token and API-key setup remains delegated.
+Policy: `tools:manage_connections`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). The service rejects delegated verification-key entry before provider work or vault writes. Human sessions and verified provider handoffs retain credential entry; agent configuration uses the responsible user's current authority.
 Evidence: `verified` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
-Verification: `passed` — deterministic provider fixtures / local assembled server; no live provider qualification.
+Verification: `passed` — actual key/JWT configure/reconnect requests return the addressed handoff with unchanged secret refs and vault signing value. A human session configures Slack; an agent can repair its bot token and send a policy-governed test message. Native setup receipts are protected. No live provider qualification.
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-setup-secret`
