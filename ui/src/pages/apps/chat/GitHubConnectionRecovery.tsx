@@ -57,6 +57,8 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
   const [error, setError] = useState("");
   const [fileError, setFileError] = useState("");
   const [rotationSecret, setRotationSecret] = useState("");
+  const [rotationGeneration, setRotationGeneration] = useState<string | null>(null);
+  const [rotationUncertain, setRotationUncertain] = useState(false);
   const needsWebhookSecret = !reconnect && !["active", "paused", "revoked"].includes(endpoint.status);
   const appName = endpoint.botLabel ?? endpoint.setup?.github?.appName ?? "your existing App";
   const appIdInvalid = !!credentials.appId.trim() && !/^\d+$/.test(credentials.appId.trim());
@@ -71,12 +73,36 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
     catch (cause) { setError(cause instanceof Error ? cause.message : "Could not reconnect GitHub. Try again."); }
     finally { setPending(false); }
   }
+  async function checkSavedRotation(expected: string | null | undefined) {
+    try {
+      const saved = await chatEndpointsApi.get(endpoint.id);
+      if (expected !== undefined && (saved.setup?.credentialRotationId ?? null) === expected) {
+        setRotationUncertain(false);
+        return true;
+      }
+      setRotationSecret("");
+      setRotationGeneration(null);
+      setError("The webhook secret changed, but this page did not receive it. Generate another secret and update GitHub.");
+    } catch {
+      // A failed status read cannot establish that the earlier secret is current.
+    }
+    setRotationUncertain(true);
+    return false;
+  }
   async function generateSecret() {
+    const previousGeneration = rotationGeneration ?? (rotationSecret ? undefined : endpoint.setup?.credentialRotationId ?? null);
     setPending(true);
     setError("");
-    setRotationSecret("");
-    try { setRotationSecret((await chatEndpointsApi.generateSetupSecret(endpoint.id)).webhookSecret); }
-    catch (cause) { setError(cause instanceof Error ? cause.message : "Could not generate the webhook secret. Try again."); }
+    try {
+      const result = await chatEndpointsApi.generateSetupSecret(endpoint.id);
+      setRotationSecret(result.webhookSecret);
+      setRotationGeneration(result.credentialRotationId ?? null);
+      setRotationUncertain(false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not generate the webhook secret. Try again.");
+      setRotationUncertain(true);
+      await checkSavedRotation(previousGeneration);
+    }
     finally { setPending(false); }
   }
   return <div className="space-y-6">
@@ -89,10 +115,16 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
       <p className="text-sm">{rotationAlreadyCommitted ? "The rotated secret is saved. Reconnect using that value; Paperclip will check GitHub’s signed delivery." : <>Generate a new secret, then replace the webhook secret in <a href={gitHubAppSettingsUrl(endpoint)} target="_blank" rel="noreferrer" className="underline">GitHub App settings</a>. GitHub must verify the new secret before you reconnect.</>}</p>
       <p className="text-sm text-muted-foreground">Generating immediately invalidates the previous secret. This value is shown only here; keep this page open until you have copied it.</p>
       <Button type="button" variant="outline" disabled={pending} onClick={() => void generateSecret()}>{rotationSecret || rotationAlreadyCommitted ? "Generate another secret" : "Generate webhook secret"}</Button>
-      {rotationSecret && <div className="space-y-2">
+      {rotationUncertain && <p role="status" className="text-sm">The active secret is not confirmed. Check its saved status before using an earlier value.</p>}
+      {rotationUncertain && rotationSecret && <Button type="button" variant="outline" disabled={pending} onClick={async () => {
+        setPending(true);
+        try { if (await checkSavedRotation(rotationGeneration ?? undefined)) setError(""); }
+        finally { setPending(false); }
+      }}>Check saved secret status</Button>}
+      {rotationSecret && !rotationUncertain && <div className="space-y-2">
         <Label htmlFor="github-rotation-secret">New webhook secret</Label>
-        <Input id="github-rotation-secret" type="password" autoComplete="off" readOnly value={rotationSecret} />
-        <CopyText text={rotationSecret} ariaLabel="Copy webhook secret" className="text-sm underline">Copy webhook secret</CopyText>
+        <Input id="github-rotation-secret" type="password" autoComplete="off" disabled={pending} readOnly value={rotationSecret} />
+        {!pending && <CopyText text={rotationSecret} ariaLabel="Copy webhook secret" className="text-sm underline">Copy webhook secret</CopyText>}
       </div>}
     </section>}
     {error && <div role="alert" className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
@@ -147,7 +179,7 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
       </div>}
     </div>}
     <SetupWizardFooter onSaveExit={onExit} disabled={pending}>
-      <Button aria-label={actionLabel} disabled={pending || incomplete || (rotateWebhookSecret && !rotationSecret && !rotationAlreadyCommitted)} onClick={() => void connect()}>
+      <Button aria-label={actionLabel} disabled={pending || incomplete || rotationUncertain || (rotateWebhookSecret && !rotationSecret && !rotationAlreadyCommitted)} onClick={() => void connect()}>
         {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
         <span className="sm:hidden" aria-hidden="true">{pending ? "Checking…" : reconnect ? "Reconnect" : "Connect"}</span>
         <span className="hidden sm:inline" aria-hidden="true">{actionLabel}</span>

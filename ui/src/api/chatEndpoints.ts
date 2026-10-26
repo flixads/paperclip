@@ -169,6 +169,7 @@ export interface ChatCallbackSurfaceState {
 
 export interface ChatEndpointSetupSecret {
   webhookSecret: string;
+  credentialRotationId?: string;
 }
 
 type ListResponse<T> =

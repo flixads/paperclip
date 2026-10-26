@@ -295,6 +295,41 @@ describe("GitHub App wizard", () => {
     expect(githubChatApi.connectApp).not.toHaveBeenCalled();
     expect(chatEndpointsApi.create).not.toHaveBeenCalled();
   });
+  it.each(["unchanged", "changed", "unavailable"])("reconciles a failed replacement without using an uncertain secret (%s)", async (outcome) => {
+    const previous = "11111111-1111-4111-8111-111111111111";
+    const generated = "22222222-2222-4222-8222-222222222222";
+    const replacement = "33333333-3333-4333-8333-333333333333";
+    const secret = "b".repeat(64);
+    fixture.endpoint.status = "active";
+    fixture.endpoint.botExternalId = "1234";
+    fixture.endpoint.setup.credentialRotationId = previous;
+    vi.mocked(chatEndpointsApi.get).mockReset().mockImplementation(async () => fixture.endpoint);
+    vi.mocked(chatEndpointsApi.generateSetupSecret).mockReset().mockResolvedValueOnce({ webhookSecret: secret, credentialRotationId: generated }).mockRejectedValueOnce(new Error("Replacement request failed"));
+    await render(`resume=draft-1&stage=credentials&reconnect=1&rotateSecret=1&afterRotationId=${previous}`);
+    const button = (label: string) => [...container.querySelectorAll("button")].find(item => item.textContent === label)!;
+    const reconnect = () => [...container.querySelectorAll("button")].find(item => item.getAttribute("aria-label") === "Reconnect saved App")!;
+    await act(async () => button("Generate webhook secret").click());
+    const before = vi.mocked(chatEndpointsApi.get).mock.calls.length;
+    if (outcome === "unavailable") vi.mocked(chatEndpointsApi.get).mockRejectedValueOnce(new Error("Status unavailable"));
+    else vi.mocked(chatEndpointsApi.get).mockResolvedValueOnce({ ...fixture.endpoint, setup: { ...fixture.endpoint.setup, credentialRotationId: outcome === "unchanged" ? generated : replacement } });
+    await act(async () => button("Generate another secret").click());
+    expect(chatEndpointsApi.get).toHaveBeenCalledTimes(before + 1);
+    if (outcome === "unchanged") {
+      expect((container.querySelector("#github-rotation-secret") as HTMLInputElement).value).toBe(secret);
+      expect(reconnect().disabled).toBe(false);
+      await act(async () => (container.querySelector('[aria-label="Copy webhook secret"]') as HTMLButtonElement).click());
+      expect(copyTextToClipboard).toHaveBeenLastCalledWith(secret);
+    } else {
+      expect(container.querySelector('[aria-label="Copy webhook secret"]')).toBeNull();
+      expect(reconnect().disabled).toBe(true);
+      if (outcome === "unavailable") {
+        vi.mocked(chatEndpointsApi.get).mockResolvedValueOnce({ ...fixture.endpoint, setup: { ...fixture.endpoint.setup, credentialRotationId: generated } });
+        await act(async () => button("Check saved secret status").click());
+        expect((container.querySelector("#github-rotation-secret") as HTMLInputElement).value).toBe(secret);
+        expect(reconnect().disabled).toBe(false);
+      }
+    }
+  });
   it.each([
     { generation: "22222222-2222-4222-8222-222222222222", verified: true, canResume: true },
     { generation: "22222222-2222-4222-8222-222222222222", verified: false, canResume: true },

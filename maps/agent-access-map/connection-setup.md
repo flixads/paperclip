@@ -202,7 +202,7 @@ Review: `operation-reviewed`.
 
 API: `present` — `GET /api/tools/oauth/cloud-connector/enrollment`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
-Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Policy: Board actor (`assertBoard`) for instance enrollment status; agents cannot read this operator surface.
 Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
@@ -211,16 +211,16 @@ Gaps: Agent invocation is denied by the stated policy. The authorized human or o
 
 API: `present` — `POST /api/tools/oauth/cloud-connector/enrollment`; JSON REST.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
-Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Policy: Instance administrator (`assertInstanceAdmin`) and access to the requested company. The saved enrollment binds the initiating human principal and return destination.
 Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.
 
 ### `get-tools-oauth-cloud-connector-enrollment-callback`
 
-API: `present` — `GET /api/tools/oauth/cloud-connector/enrollment-callback`; JSON REST.
+API: `present` — `GET /api/tools/oauth/cloud-connector/enrollment-callback`; browser return — HTML completion page or HTTP 303 redirect.
 Agent access: `operator-only` — existing human setup or approval surface; agent can identify the saved setup and inspect the result.
-Policy: Human consent, identity confirmation, action approval, or trusted-host administration. This endpoint does not delegate human identity or self-approval to an agent.
+Policy: Instance administrator (`assertInstanceAdmin`), access to the saved company, and the same initiating principal. The saved enrollment ID, approval code, state, and expiry must validate before completion.
 Evidence: `source-only` — [route](../../server/src/routes/tool-access.ts); reviewed in the working tree based on the source commit above.
 Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
 Gaps: Agent invocation is denied by the stated policy. The authorized human or operator must perform this step; this entry does not claim delegated execution.

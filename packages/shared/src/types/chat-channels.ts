@@ -247,6 +247,7 @@ export interface ChatEndpointSetupState {
 
 export interface ChatEndpointSetupSecret {
   webhookSecret: string;
+  credentialRotationId?: string;
 }
 
 export type ChannelPublicationMode = "automatic" | "explicit";
