@@ -735,6 +735,47 @@ describe("connection management with production default agents", () => {
     } finally { provider = null; unregisterServerAdapter("paperclip_runner"); }
   });
 
+  it("filters AI account and pool listings by the agent's resolved connection scope", async () => {
+    const f = await fixture();
+    provider = async url => {
+      if (url === "https://api.openai.com/v1/models") return Response.json({ data: [] });
+      throw new Error("Unexpected AI fixture request");
+    };
+    try {
+      const accounts: { connectionId: string; grantId: string }[] = [];
+      for (const name of ["Allowed account", "Outside agent scope"]) {
+        const account = await f.request("POST", `/companies/${f.companyId}/ai-connections`, { provider: "openai", method: "api_key", name, ownership: "personal", apiKey: `fixture-${name}`, agentIds: [] });
+        expect(account, JSON.stringify(account)).toMatchObject({ status: 201 });
+        accounts.push(account.body);
+      }
+      await instanceSettingsService(server.db).updateExperimental({ enableAiConnectionRouters: true });
+      const pluginKey = `fixture.scope.${f.agentId}`;
+      await server.db.insert(plugins).values({ pluginKey, packageName: pluginKey, version: "0.1.0", status: "ready", manifestJson: {
+        id: pluginKey, apiVersion: 1, version: "0.1.0", displayName: "Fixture router", description: "Fixture", author: "Tests",
+        categories: ["connector"], capabilities: ["ai.connections.route"], aiConnectionRouter: { name: "Fixture pool", description: "Use saved accounts" }, entrypoints: { worker: "worker.js" },
+      } });
+      const savedPools: { id: string }[] = [];
+      for (const account of accounts) {
+        const pool = await f.request("POST", `/companies/${f.companyId}/ai-connection-pools`, { pluginKey, config: { name: `Pool ${account.connectionId}`, enabled: true, mode: "round_robin", thresholdPercent: 90,
+          members: [{ id: randomUUID(), binding: { mode: "delegated", provider: "openai", method: "api_key", ...account }, profile: { provider: "codex", model: "gpt-5.6-sol", effort: "low" } }] } });
+        expect(pool, JSON.stringify(pool)).toMatchObject({ status: 200 });
+        savedPools.push(pool.body);
+      }
+      const path = `/companies/${f.companyId}/ai-connections?connectionId=${accounts[0].connectionId}`;
+      expect((await f.request("GET", path)).body.connections).toHaveLength(2);
+      expect((await f.request("GET", path)).body.pools).toHaveLength(2);
+      for (const connectionIds of [[accounts[0].connectionId], [accounts[0].connectionId, ...savedPools.map(pool => pool.id)]]) {
+        await server.db.update(principalPermissionGrants).set({ scope: { connectionIds } }).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_connections")));
+        for (const token of [f.key.token, f.jwt]) {
+          const listed = await f.request("GET", path, undefined, token);
+          expect(listed, JSON.stringify(listed)).toMatchObject({ status: 200 });
+          expect(listed.body.connections.map((account: { id: string }) => account.id)).toEqual([accounts[0].connectionId]);
+          expect(listed.body.pools.map((pool: { id: string }) => pool.id)).toEqual(connectionIds.length === 1 ? [] : [savedPools[0].id]);
+        }
+      }
+    } finally { provider = null; }
+  });
+
   it("reuses a saved chat authentication request and resumes only while its authority remains valid", async () => {
     const f = await fixture();
     const created = await f.request("POST", `/companies/${f.companyId}/chat-endpoints`, { provider: "github", assignedAgentId: f.agentId });
