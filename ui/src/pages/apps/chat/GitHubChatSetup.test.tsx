@@ -295,6 +295,26 @@ describe("GitHub App wizard", () => {
     expect(githubChatApi.connectApp).not.toHaveBeenCalled();
     expect(chatEndpointsApi.create).not.toHaveBeenCalled();
   });
+  it.each([
+    { generation: "22222222-2222-4222-8222-222222222222", verified: true, canResume: true },
+    { generation: "22222222-2222-4222-8222-222222222222", verified: false, canResume: true },
+    { generation: "11111111-1111-4111-8111-111111111111", verified: true, canResume: false },
+  ])("resumes only the saved rotation generation without requiring its secret again ($verified, $canResume)", async ({ generation, verified, canResume }) => {
+    fixture.endpoint.status = "attention";
+    fixture.endpoint.botExternalId = "1234";
+    fixture.endpoint.setup.credentialRotationId = generation;
+    fixture.endpoint.setup.webhookVerifiedAt = verified ? new Date().toISOString() : null;
+    vi.mocked(chatEndpointsApi.setup).mockResolvedValue(fixture.endpoint);
+    await render("resume=draft-1&stage=credentials&reconnect=1&rotateSecret=1&afterRotationId=11111111-1111-4111-8111-111111111111");
+    const reconnect = [...container.querySelectorAll("button")].find(button => button.getAttribute("aria-label") === "Reconnect saved App")!;
+    expect(reconnect.disabled).toBe(!canResume);
+    expect(container.querySelector("#github-rotation-secret")).toBeNull();
+    expect(chatEndpointsApi.generateSetupSecret).not.toHaveBeenCalled();
+    if (canResume) {
+      await act(async () => reconnect.click());
+      expect(chatEndpointsApi.setup).toHaveBeenCalledWith("draft-1", { action: "reconnect" });
+    }
+  });
   it("reconnects the same App using vaulted credentials without requiring another paste", async () => {
     fixture.endpoint.status = "attention";
     fixture.endpoint.botExternalId = "1234";

@@ -229,6 +229,8 @@ export interface ChatEndpointSetupState {
   testSkipped?: boolean;
   /** Set only after the provider has delivered a signed callback challenge. */
   webhookVerifiedAt?: string | null;
+  /** Nonsecret generation used to resume a requested signing-secret rotation. */
+  credentialRotationId?: string | null;
   authorizationUrl?: string | null;
   providerUrl?: string | null;
   command?: string | null;

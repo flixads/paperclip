@@ -42,10 +42,11 @@ function CredentialLabel({ id, label, help }: { id: string; label: string; help:
   </div>;
 }
 
-export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = false, onConnect, onExit }: {
+export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = false, rotationAlreadyCommitted = false, onConnect, onExit }: {
   endpoint: ChatEndpoint;
   reconnect: boolean;
   rotateWebhookSecret?: boolean;
+  rotationAlreadyCommitted?: boolean;
   onConnect: (credentials?: GitHubAppCredentials) => Promise<void>;
   onExit: () => void;
 }) {
@@ -85,9 +86,9 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
     </div>}
     {rotateWebhookSecret && <section aria-label="Rotate webhook secret" className="space-y-3">
       <h2 className="text-base font-semibold">Rotate the webhook secret</h2>
-      <p className="text-sm">Generate a new secret, then replace the webhook secret in <a href={gitHubAppSettingsUrl(endpoint)} target="_blank" rel="noreferrer" className="underline">GitHub App settings</a>. GitHub must verify the new secret before you reconnect.</p>
+      <p className="text-sm">{rotationAlreadyCommitted ? "The rotated secret is saved. Reconnect using that value; Paperclip will check GitHub’s signed delivery." : <>Generate a new secret, then replace the webhook secret in <a href={gitHubAppSettingsUrl(endpoint)} target="_blank" rel="noreferrer" className="underline">GitHub App settings</a>. GitHub must verify the new secret before you reconnect.</>}</p>
       <p className="text-sm text-muted-foreground">Generating immediately invalidates the previous secret. This value is shown only here; keep this page open until you have copied it.</p>
-      <Button type="button" variant="outline" disabled={pending} onClick={() => void generateSecret()}>Generate webhook secret</Button>
+      <Button type="button" variant="outline" disabled={pending} onClick={() => void generateSecret()}>{rotationSecret || rotationAlreadyCommitted ? "Generate another secret" : "Generate webhook secret"}</Button>
       {rotationSecret && <div className="space-y-2">
         <Label htmlFor="github-rotation-secret">New webhook secret</Label>
         <Input id="github-rotation-secret" type="password" autoComplete="off" readOnly value={rotationSecret} />
@@ -146,7 +147,7 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
       </div>}
     </div>}
     <SetupWizardFooter onSaveExit={onExit} disabled={pending}>
-      <Button aria-label={actionLabel} disabled={pending || incomplete || (rotateWebhookSecret && !rotationSecret)} onClick={() => void connect()}>
+      <Button aria-label={actionLabel} disabled={pending || incomplete || (rotateWebhookSecret && !rotationSecret && !rotationAlreadyCommitted)} onClick={() => void connect()}>
         {pending && <Loader2 className="size-4 animate-spin" aria-hidden="true" />}
         <span className="sm:hidden" aria-hidden="true">{pending ? "Checking…" : reconnect ? "Reconnect" : "Connect"}</span>
         <span className="hidden sm:inline" aria-hidden="true">{actionLabel}</span>

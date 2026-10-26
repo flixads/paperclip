@@ -376,10 +376,11 @@ export function GitHubChatSetup() {
         </>
       ) : existing ? (
         <GitHubAppRecovery
-          key={bot.id}
+          key={`${bot.id}:${rotateWebhookSecret ? params.get("afterRotationId") ?? "unspecified" : "credentials"}`}
           endpoint={bot}
           reconnect={reconnect}
           rotateWebhookSecret={rotateWebhookSecret}
+          rotationAlreadyCommitted={params.has("afterRotationId") && !!bot.setup?.credentialRotationId && bot.setup.credentialRotationId !== params.get("afterRotationId")}
           onExit={exit}
           onConnect={async (credentials) => {
             if (reconnect || ["active", "paused", "revoked"].includes(bot.status)) {
