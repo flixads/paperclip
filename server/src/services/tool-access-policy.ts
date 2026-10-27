@@ -18,6 +18,7 @@ import {
   toolCallEvents,
   toolInvocations,
   toolMcpGateways,
+  toolMcpGatewayTokens,
   toolPolicies,
   toolProfileBindings,
   toolProfileEntries,
@@ -1387,8 +1388,9 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       policyExplanation: toolInvocations.policyExplanation,
     }).from(toolInvocations).where(and(eq(toolInvocations.companyId, ctx.companyId), eq(toolInvocations.id, invocationId)));
     const delegated = invocation?.policyExplanation?.delegatedConnectionTest as { agentId?: string } | undefined;
+    const gatewayIssuer = invocation?.gatewayId ? invocation.policyExplanation?.delegatedGatewayIssuer : undefined;
     const isDelegatedCaller = invocation?.actorType === "agent" && invocation.actorId === ctx.agentId
-      && delegated?.agentId === ctx.agentId && invocation.agentId !== ctx.agentId;
+      && (delegated?.agentId === ctx.agentId || gatewayIssuer === ctx.agentId) && invocation.agentId !== ctx.agentId;
     const authorized = invocation && (
       (invocation.status === "executing" && (invocation.policyDecision === "allow" || (invocation.policyDecision === "require_approval" && invocation.approvalState === "approved")))
       || (invocation.status === "awaiting_approval" && invocation.policyDecision === "require_approval" && ["pending", "approved"].includes(invocation.approvalState))
@@ -1752,6 +1754,9 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
       issueId: ctx.issueId,
       runId: ctx.heartbeatRunId,
       gatewayId: ctx.gatewayId,
+      ...(input.runContext?.gatewayTokenId ? { gatewayTokenId: sql`(select ${toolMcpGatewayTokens.id} from ${toolMcpGatewayTokens}
+        where ${toolMcpGatewayTokens.id} = ${input.runContext.gatewayTokenId} and ${toolMcpGatewayTokens.companyId} = ${ctx.companyId}
+          and ${toolMcpGatewayTokens.gatewayId} = ${ctx.gatewayId})` } : {}),
       applicationId: ctx.applicationId,
       connectionId: ctx.connectionId,
       catalogEntryId: ctx.catalogEntryId,
@@ -1782,7 +1787,7 @@ export function toolAccessPolicyService(db: Db, options: { toolActionSigningSecr
         status: "pending",
         canonicalArgumentsHash: requestIdentityHash!,
         canonicalArgumentsSummary: redaction.summary,
-        requestedByAgentId: ctx.actorType === "agent" ? ctx.agentId : null,
+        requestedByAgentId: ctx.actorType === "agent" ? ctx.actorId : null,
         requestedByUserId: ctx.actorType === "user" ? ctx.actorId : null,
       }).returning();
     }

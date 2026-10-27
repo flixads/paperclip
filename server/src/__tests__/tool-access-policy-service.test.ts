@@ -34,7 +34,8 @@ import { toolAccessService } from "../services/tool-access.js";
 import { createToolGatewayService, ToolGatewayHttpError } from "../services/tool-gateway.js";
 import { canonicalToolArguments, signToolArguments } from "../services/tool-content-guards.js";
 
-const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
+const externalTestDatabaseUrl = process.env.PAPERCLIP_TOOL_POLICY_TEST_DATABASE_URL;
+const embeddedPostgresSupport = externalTestDatabaseUrl ? { supported: true } : await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 
 function legacySideEffectKey(invocation: typeof toolInvocations.$inferSelect, argumentsHash: string) {
@@ -215,8 +216,8 @@ describeEmbeddedPostgres("tool access policy service", () => {
   let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
 
   beforeAll(async () => {
-    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-tool-access-policy-");
-    db = createDb(tempDb.connectionString);
+    if (!externalTestDatabaseUrl) tempDb = await startEmbeddedPostgresTestDatabase("paperclip-tool-access-policy-");
+    db = createDb(externalTestDatabaseUrl ?? tempDb!.connectionString);
   }, 20_000);
 
   afterEach(async () => {
@@ -244,6 +245,7 @@ describeEmbeddedPostgres("tool access policy service", () => {
   });
 
   afterAll(async () => {
+    await db?.$client.end({ timeout: 1 });
     await tempDb?.cleanup();
   });
 
