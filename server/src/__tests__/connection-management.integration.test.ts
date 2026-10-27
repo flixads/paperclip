@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { createServer } from "node:http";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, afterAll, describe, expect, it, vi } from "vitest";
-import { activityLog, agentApiKeys, companies, companySecrets, companySecretVersions, chatConversations, chatDeliveries, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolCatalogEntries, toolInvocations, toolCallEvents, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
+import { activityLog, agentApiKeys, companies, companySecrets, companySecretVersions, chatConversations, chatDeliveries, chatEndpoints, chatExternalPrincipals, chatIdentityLinks, toolPolicies, connectionGrants, connectionGrantDelegations, toolAccessAuditEvents, toolOauthStates, issueThreadInteractions, connectionIntentDeliveries, agents, companyMemberships, heartbeatRuns, issues, principalPermissionGrants, projects, toolConnections, toolMcpGateways, toolMcpGatewayTokens, toolActionRequests, toolCatalogEntries, toolInvocations, toolCallEvents, toolProfileBindings, plugins, adapterAuthSessions, environments, routines, chatGitHubReviews } from "@paperclipai/db";
 import { findSatisfiedToolConnection, satisfiedConnectionIntentService } from "../services/satisfied-connection-intents.js";
 import { connectionManagementService, continuingConnectionManagement } from "../services/connection-management.js";
 import { redactRunnerApiPayloads } from "../services/native-runtime/runner-api-log-redaction.js";
@@ -12,6 +12,7 @@ import * as remoteEndpointGuard from "../services/remote-http-endpoint-guard.js"
 import * as remoteHttpFetch from "../services/remote-http-fetch.js";
 import * as runIdentity from "../services/run-identity.js";
 import * as connectionManagementModule from "../services/connection-management.js";
+import * as localBrowserLogin from "../services/local-ai-browser-login.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { startRunnerApiTestServer } from "./helpers/runner-api-server.js";
 import { getServerAdapter, registerServerAdapter, unregisterServerAdapter } from "../adapters/index.js";
@@ -1019,6 +1020,25 @@ describe("connection management with production default agents", () => {
     } finally { authorization.mockRestore(); }
   });
 
+  it("continues activity pagination through private-only windows", async () => {
+    const f = await fixture();
+    const endpoint = await f.request("POST", `/companies/${f.companyId}/chat-endpoints`, { provider: "github", assignedAgentId: f.agentId });
+    const [hidden] = await server.db.insert(issues).values({ companyId: f.companyId, title: "Private history", visibility: "private", status: "in_progress", responsibleUserId: randomUUID() }).returning();
+    const conversations = await server.db.insert(chatConversations).values([f.issueId, hidden.id].map(issueId => ({ companyId: f.companyId, endpointId: endpoint.body.id, issueId,
+      externalConversationId: randomUUID(), externalLabel: "History" }))).returning();
+    const rows = Array.from({ length: 30 }, (_, index) => ({ id: `${f.agentId.slice(0, 24)}${index.toString(16).padStart(12, "0")}`,
+      companyId: f.companyId, endpointId: endpoint.body.id, conversationId: conversations[index < 3 ? 0 : 1].id,
+      providerEventId: randomUUID(), deduplicationKey: randomUUID(), eventKind: index < 3 ? "readable_history" : "private_history", state: "processed", normalizedEvent: {}, createdAt: new Date("2026-10-25T12:00:00.000Z") }));
+    await server.db.insert(chatDeliveries).values(rows);
+    const path = `/chat-endpoints/${endpoint.body.id}/activity?limit=25`;
+    const first = await f.request("GET", path, undefined, f.jwt);
+    expect(first).toMatchObject({ status: 200, body: { items: [], nextCursor: expect.any(String) } });
+    expect(JSON.stringify(first.body)).not.toContain("private_history");
+    const second = await f.request("GET", `${path}&cursor=${encodeURIComponent(first.body.nextCursor)}`, undefined, f.jwt);
+    expect(second).toMatchObject({ status: 200, body: { items: rows.slice(0, 3).reverse().map(row => expect.objectContaining({ id: row.id })), nextCursor: null } });
+    expect(JSON.stringify(second.body)).not.toContain("private_history");
+  });
+
   it("saves delegated Arcade discovery for the responsible user and shares its inventory with that user", async () => {
     const f = await fixture();
     const transport = vi.spyOn(remoteHttpFetch, "guardedRemoteHttpFetch").mockImplementation(async (url, init) => provider!(String(url), init));
@@ -1054,6 +1074,42 @@ describe("connection management with production default agents", () => {
         expect(result.apps).toEqual(expect.arrayContaining([expect.objectContaining({ provider: "arcade", appSlug: "notion" })]));
       }, { timeout: 10_000 });
     } finally { transport.mockRestore(); provider = null; }
+  });
+
+  it("encrypts native local-login checks and replays without exposing device codes in receipts or assets", async () => {
+    const f = await fixture();
+    const priorHome = process.env.PAPERCLIP_HOME;
+    vi.stubEnv("PAPERCLIP_HOME", join(server.root, "local-login-receipt"));
+    const authorizationUrl = "https://fixture.invalid/device?private_handoff=disposable-login";
+    const code = "DISPOSABLE-DEVICE-CODE";
+    const browser = vi.spyOn(localBrowserLogin, "startLocalBrowserLogin").mockReturnValue({ authorizationUrl, code, abort: vi.fn() });
+    const intent = { provider: "openai", method: "subscription", ownership: "personal", name: "Local receipt fixture", agentIds: [], allAgents: false };
+    let sessionId: string | undefined;
+    try {
+      const started = await f.request("POST", `/companies/${f.companyId}/ai-connections/local/attempts`, intent, f.jwt);
+      expect(started, JSON.stringify(started)).toMatchObject({ status: 201, body: { sessionId: expect.any(String) } });
+      sessionId = started.body.sessionId;
+      const call = { tool: "call_api", callId: "local-login-private-check", arguments: {
+        operationId: "POST /api/companies/{companyId}/ai-connections/local/check", body: { ...intent, localSessionId: sessionId },
+      } };
+      const result = await f.authority.execute(call);
+      expect(result).toMatchObject({ ok: true, status: 200, data: { status: "sign_in_required", authorizationUrl, code } });
+      expect(result).not.toHaveProperty("artifact");
+      expect(await f.authority.execute(call)).toEqual(result);
+      const [run] = await server.db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, f.runId));
+      const receipts = (run.resultJson as { apiToolReceipts: Record<string, { operationId: string }> }).apiToolReceipts;
+      expect(Object.values(receipts).find(receipt => receipt.operationId === call.arguments.operationId)).toHaveProperty("encryptedResult");
+      for (const secret of [authorizationUrl, code]) {
+        expect(JSON.stringify(run.resultJson)).not.toContain(secret);
+        expect(JSON.stringify(redactRunnerApiPayloads(result))).not.toContain(secret);
+      }
+      expect((await f.snapshot()).assets.filter(asset => asset.objectKey.includes("/runner-api/"))).toEqual([]);
+    } finally {
+      if (sessionId) await f.request("DELETE", `/companies/${f.companyId}/ai-connections/local/attempts/${sessionId}`, undefined, f.jwt);
+      browser.mockRestore();
+      if (priorHome === undefined) delete process.env.PAPERCLIP_HOME;
+      else process.env.PAPERCLIP_HOME = priorHome;
+    }
   });
 
   it("keeps durable gateway client tokens bound to the issuer and responsible user", async () => {
@@ -1096,6 +1152,95 @@ describe("connection management with production default agents", () => {
     const [orphaned] = await server.db.select().from(toolMcpGatewayTokens).where(eq(toolMcpGatewayTokens.id, token.body.id));
     expect(orphaned).toMatchObject({ createdByAgentId: null, responsibleUserId: f.userId });
     expect((await use()).status).toBeGreaterThanOrEqual(400);
+  });
+
+  it.each(["block", "ask", "ask-board", "ask-revoked", "ask-rate", "ask-token-revoked", "ask-token-deleted", "ask-token-scope", "ask-grant-revoked", "rate", "shared-rate", "target-block", "credential"] as const)("intersects gateway issuer and target rules (%s)", async mode => {
+    const f = await fixture();
+    const cookie = await server.humanSession(f.userId);
+    const createdTarget = await fetch(`${server.apiUrl}/api/companies/${f.companyId}/agents`, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Gateway target", role: "engineer", adapterType: "paperclip_runner", adapterConfig: { provider: "codex" }, permissions: {}, runtimeConfig: { heartbeat: { enabled: false, wakeOnDemand: false } } }) });
+    const target = await createdTarget.json();
+    expect(createdTarget.status).toBe(201);
+    await lifecycle.process(target.id);
+    await vi.waitFor(async () => expect((await agentService(server.db).getById(target.id))?.status).toBe("idle"));
+    let calls = 0;
+    const remote = createServer(async (req, res) => {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      const rpc = JSON.parse(body || "{}");
+      let result: unknown;
+      if (rpc.method === "initialize") result = { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "Fixture", version: "1" } };
+      else if (rpc.method === "tools/list") result = { tools: [{ name: "fixture_probe", inputSchema: { type: "object" } }] };
+      else if (rpc.method === "tools/call") { calls++; result = { content: [{ type: "text", text: "Fixture gateway result" }] }; }
+      else { res.writeHead(202); res.end(); return; }
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ jsonrpc: "2.0", id: rpc.id, result }));
+    });
+    await new Promise<void>(resolve => remote.listen(0, "127.0.0.1", resolve));
+    const address = remote.address();
+    if (!address || typeof address === "string") throw new Error("No fixture address");
+    try {
+      const connection = await f.request("POST", `/companies/${f.companyId}/tools/connections`, { name: "Gateway policy fixture", transport: "mcp_remote", authKind: "none", transportConfig: { url: `http://127.0.0.1:${address.port}/mcp` } });
+      expect(connection.status).toBe(201);
+      await server.db.update(toolConnections).set({ healthStatus: "ok" }).where(eq(toolConnections.id, connection.body.id));
+      const [entry] = await server.db.insert(toolCatalogEntries).values({ companyId: f.companyId, applicationId: connection.body.applicationId, connectionId: connection.body.id,
+        entryKind: "tool", name: "Fixture probe", toolName: "fixture_probe", inputSchema: { type: "object" }, riskLevel: "read", isReadOnly: true, status: "active", versionHash: "fixture-v1" }).returning();
+      expect(await f.request("POST", `/companies/${f.companyId}/tools/apps/${connection.body.id}/finish`, { enabledCatalogEntryIds: [entry.id], access: { agentIds: [f.agentId, target.id] } })).toMatchObject({ status: 200 });
+      const profile = await f.request("POST", `/companies/${f.companyId}/tools/profiles`, { profileKey: "gateway-rules", name: "Gateway rules", entries: [{ selectorType: "connection", connectionId: connection.body.id }] });
+      const gateway = await f.request("POST", `/companies/${f.companyId}/tools/gateways`, { name: "Cross-agent gateway", slug: "cross-agent", profileId: profile.body.id, agentId: target.id, issueId: f.issueId, projectId: f.projectId });
+      expect(gateway, JSON.stringify(gateway)).toMatchObject({ status: 201 });
+      const tokenBody = { companyId: f.companyId, name: "Issuer client", clientLabel: "fixture" };
+      const token = mode === "ask-board" ? await (async () => {
+        const response = await fetch(`${server.apiUrl}/api/tool-gateway/gateways/${gateway.body.id}/tokens`, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" }, body: JSON.stringify(tokenBody) });
+        return { status: response.status, body: await response.json() };
+      })() : await f.request("POST", `/tool-gateway/gateways/${gateway.body.id}/tokens`, tokenBody);
+      expect(token, JSON.stringify(token)).toMatchObject({ status: 201 });
+      const path = `/mcp/gateways/${gateway.body.gatewayPublicId}`;
+      const rpc = (method: string, params?: unknown) => f.request("POST", path, { jsonrpc: "2.0", id: randomUUID(), method, ...(params ? { params } : {}) }, token.body.token);
+      const listed = await rpc("tools/list");
+      const tool = listed.body.result?.tools?.find((tool: { name: string }) => tool.name.includes("fixture-probe"));
+      expect(tool, JSON.stringify(listed)).toBeTruthy();
+      vi.useFakeTimers({ toFake: ["Date"] });
+      const isRate = mode === "rate" || mode === "shared-rate";
+      await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "Gateway caller control", policyType: isRate ? "rate_limit" : mode.startsWith("ask") ? "require_approval" : mode === "credential" ? "allow" : "block",
+        selectors: { connectionId: connection.body.id, ...(mode === "shared-rate" ? {} : { agentId: mode === "target-block" || mode === "ask-board" ? target.id : f.agentId }) }, priority: 0,
+        ...(isRate ? { config: { limit: 1, windowSeconds: 60, keyBy: mode === "shared-rate" ? ["company", "tool"] : ["agent", "tool"] } } : {}) });
+      if (mode === "ask-rate") await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "One issuer admission", policyType: "rate_limit", selectors: { connectionId: connection.body.id, agentId: f.agentId }, priority: -1, config: { limit: 1, windowSeconds: 60, keyBy: ["agent", "tool"] } });
+      if (mode === "credential") {
+        await server.db.update(toolConnections).set({ credentialPolicy: "per_agent" }).where(eq(toolConnections.id, connection.body.id));
+        await server.db.insert(connectionGrants).values([f.agentId, target.id].map(subjectAgentId => ({ companyId: f.companyId, connectionId: connection.body.id, kind: "agent" as const, subjectAgentId, status: "active" })));
+      }
+      const called = await rpc("tools/call", { name: tool.name, arguments: {} });
+      if (isRate) {
+        expect(calls, JSON.stringify(called)).toBe(1);
+        await rpc("tools/call", { name: tool.name, arguments: { another: true } });
+        expect(calls).toBe(1);
+        return;
+      }
+      expect(calls, JSON.stringify(called)).toBe(0);
+      if (mode === "credential") {
+        expect(JSON.stringify(called.body)).toContain("gateway_credential_identity_mismatch");
+        return;
+      }
+      const [invocation] = await server.db.select().from(toolInvocations).where(eq(toolInvocations.gatewayId, gateway.body.id));
+      expect(invocation).toMatchObject({ gatewayTokenId: token.body.id, actorId: mode === "ask-board" ? token.body.id : f.agentId, agentId: target.id, policyDecision: mode.startsWith("ask") ? "require_approval" : "deny" });
+      if (!mode.startsWith("ask")) return;
+      const [action] = await server.db.select().from(toolActionRequests).where(eq(toolActionRequests.invocationId, invocation.id));
+      expect(action.requestedByAgentId).toBe(mode === "ask-board" ? null : f.agentId);
+      if (mode === "ask-revoked") await server.db.insert(toolPolicies).values({ companyId: f.companyId, name: "Issuer blocked after review", policyType: "block", selectors: { connectionId: connection.body.id, agentId: f.agentId }, priority: -1 });
+      if (mode === "ask-token-revoked") await server.db.update(toolMcpGatewayTokens).set({ revokedAt: new Date() }).where(eq(toolMcpGatewayTokens.id, token.body.id));
+      if (mode === "ask-token-deleted") await server.db.delete(toolMcpGatewayTokens).where(eq(toolMcpGatewayTokens.id, token.body.id));
+      if (mode === "ask-token-scope") await server.db.update(toolMcpGatewayTokens).set({ allowedActions: ["tools/list"] }).where(eq(toolMcpGatewayTokens.id, token.body.id));
+      if (mode === "ask-grant-revoked") await server.db.delete(principalPermissionGrants).where(and(eq(principalPermissionGrants.principalId, f.agentId), eq(principalPermissionGrants.permissionKey, "tools:manage_connections")));
+      const approvalDenied = ["ask-revoked", "ask-token-revoked", "ask-token-deleted", "ask-token-scope", "ask-grant-revoked"].includes(mode);
+      const response = await fetch(`${server.apiUrl}/api/tool-gateway/action-requests/${action.id}/approve`, { method: "POST", headers: { cookie, origin: server.apiUrl, "Content-Type": "application/json" }, body: JSON.stringify({ companyId: f.companyId }) });
+      expect(response.status, JSON.stringify(await response.json())).toBe(approvalDenied ? 403 : 200);
+      expect(calls).toBe(approvalDenied ? 0 : 1);
+      if (mode === "ask-rate") {
+        await rpc("tools/call", { name: tool.name, arguments: { another: true } });
+        expect(calls).toBe(1);
+      }
+    } finally { vi.useRealTimers(); await new Promise<void>((resolve, reject) => remote.close(error => error ? reject(error) : resolve())); }
   });
 
   it("requires retained profile authority to clear gateway bindings and connection audiences", async () => {

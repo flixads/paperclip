@@ -67,6 +67,9 @@ describe("connection setup response protection", () => {
     ["POST", "/api/companies/{companyId}/adapters/{type}/login-sessions"],
     ["GET", "/api/companies/{companyId}/setup-token-login-sessions/{sessionId}/prompt"],
     ["POST", "/api/tool-gateway/gateways/{gatewayId}/tokens"],
+    ["POST", "/api/companies/{companyId}/ai-connections/local/check"],
+    ["POST", "/api/tool-connections/{connectionId}/test-calls"],
+    ["GET", "/api/tool-connections/{connectionId}/test-calls/{actionRequestId}"],
   ])("protects %s %s receipts and history", (method, path) => {
     expect(runnerApiSensitiveResponse(method, path)).toBe(true);
   });

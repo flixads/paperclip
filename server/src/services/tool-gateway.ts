@@ -1241,7 +1241,65 @@ export function createToolGatewayService(
   });
   const pluginToolDispatcher = options.pluginToolDispatcher;
   const interactions = issueThreadInteractionService(db);
-  const policyService = toolAccessPolicyService(db, { toolActionSigningSecret: options.toolActionSigningSecret });
+  const basePolicyService = toolAccessPolicyService(db, { toolActionSigningSecret: options.toolActionSigningSecret });
+  const issuerDecisionCaches = new WeakMap<ToolAccessDecisionCache, ToolAccessDecisionCache>();
+  const policyService = {
+    ...basePolicyService,
+    async decide(input: ToolAccessDecisionInput, decisionOptions: NonNullable<Parameters<typeof basePolicyService.decide>[1]> & { requiredGatewayAction?: ToolMcpGatewayTokenAction } = {}): Promise<ToolAccessDecision> {
+      const issuerId = input.runContext?.originatingAgentId;
+      if (!issuerId || !input.runContext?.gatewayId || input.actor.actorType !== "agent") return basePolicyService.decide(input, decisionOptions);
+      if (!input.runContext.gatewayTokenId) throw new ToolGatewayHttpError(403, "Delegated gateway token is no longer available", "gateway_token_run_context_invalid");
+      let issuerCache: ToolAccessDecisionCache | undefined;
+      if (decisionOptions.cache) {
+        issuerCache = issuerDecisionCaches.get(decisionOptions.cache);
+        if (!issuerCache) { issuerCache = createToolAccessDecisionCache(); issuerDecisionCaches.set(decisionOptions.cache, issuerCache); }
+      }
+      const requiredAction = decisionOptions.requiredGatewayAction ?? (input.consumeRateLimit ? "tools/call" : undefined);
+      const authorityKey = `gateway-issuer:${input.companyId}:${input.runContext.gatewayTokenId}:${issuerId}:${requiredAction ?? "inspect"}`;
+      let authority = issuerCache?.get(authorityKey);
+      if (!authority) {
+        authority = assertGatewayIssuerAuthority(input, requiredAction);
+        issuerCache?.set(authorityKey, authority);
+      }
+      await authority;
+      if (issuerId === input.actor.agentId) {
+        const decision = await basePolicyService.decide(input, decisionOptions);
+        return { ...decision, policyExplanation: { ...decision.policyExplanation, delegatedGatewayIssuer: issuerId } };
+      }
+      const issuerInput = { ...input, actor: { ...input.actor, agentId: issuerId } };
+      const issuer = await basePolicyService.decide(issuerInput, { ...decisionOptions, cache: issuerCache });
+      const target = await basePolicyService.decide(input, { ...decisionOptions, sharedRateDecision: issuer });
+      const chosen = !issuer.allowed && issuer.decision !== "require_approval" ? issuer
+        : !target.allowed ? target : issuer.decision === "require_approval" ? issuer : target;
+      if (input.consumeRateLimit) await basePolicyService.writeAudit(issuerInput, issuer);
+      return { ...chosen, matchedPolicyIds: [...new Set([...issuer.matchedPolicyIds, ...target.matchedPolicyIds])], policyExplanation: {
+        ...chosen.policyExplanation,
+        consumedRateAdmissions: target.policyExplanation?.consumedRateAdmissions,
+        delegatedCallerConsumedRateAdmissions: issuer.policyExplanation?.consumedRateAdmissions,
+        delegatedGatewayIssuer: issuerId,
+      } };
+    },
+  };
+
+  async function assertGatewayIssuerAuthority(input: ToolAccessDecisionInput, requiredAction?: ToolMcpGatewayTokenAction) {
+    const [row] = await db.select({ token: toolMcpGatewayTokens, gateway: toolMcpGateways }).from(toolMcpGatewayTokens)
+      .innerJoin(toolMcpGateways, eq(toolMcpGateways.id, toolMcpGatewayTokens.gatewayId))
+      .where(and(eq(toolMcpGatewayTokens.id, input.runContext!.gatewayTokenId!), eq(toolMcpGatewayTokens.companyId, input.companyId)));
+    const issuerId = input.runContext!.originatingAgentId!;
+    if (!row || row.token.subjectType !== "gateway_client" || row.token.createdByAgentId !== issuerId || !row.token.responsibleUserId
+      || input.actor.actorId !== issuerId || row.gateway.id !== input.runContext?.gatewayId || row.gateway.status !== "active"
+      || row.token.revokedAt || (row.token.expiresAt && row.token.expiresAt <= new Date())
+      || (row.gateway.agentId && row.gateway.agentId !== input.actor.agentId)) {
+      throw new ToolGatewayHttpError(403, "Delegated gateway authority is no longer current", "gateway_token_run_context_invalid");
+    }
+    if (requiredAction && !normalizeGatewayTokenActions(row.token.allowedActions).includes(requiredAction)) throw new ToolGatewayHttpError(403, "The gateway token no longer allows this action", "gateway_token_action_not_allowed");
+    const actor = { type: "agent" as const, companyId: input.companyId, agentId: issuerId, onBehalfOfUserId: row.token.responsibleUserId };
+    const resource = { type: "connection_management" as const, companyId: input.companyId, gatewayId: row.gateway.id,
+      profileId: row.gateway.profileId, purpose: "tool" as const, operation: "gateway_token.use", targetAgentId: row.gateway.agentId,
+      projectId: row.gateway.projectId, issueId: row.gateway.issueId };
+    await connectionManagementService(db).authorize(actor, "connections:gateway", resource, { mutation: false });
+    await connectionManagementService(db).authorize(actor, "connections:test", resource, { mutation: false });
+  }
   async function recordToolInvocation(input: ToolAccessDecisionInput, decision: ToolAccessDecision) {
     try {
       return await policyService.recordInvocation(input, decision);
@@ -2576,7 +2634,7 @@ export function createToolGatewayService(
         .values({
           companyId: input.session.companyId,
           type: "request_board_approval",
-          requestedByAgentId: input.session.agentId,
+          requestedByAgentId: input.session.originatingAgentId ?? input.session.agentId,
           payload: {
             title: `Approve high-risk tool action: ${input.tool.name}`,
             summary: `${input.tool.name} is classified as ${input.tool.risk} and requires formal board approval before execution.`,
@@ -2797,6 +2855,7 @@ export function createToolGatewayService(
       consumeRateLimit: input.consumeRateLimit,
       heartbeatRunId: input.session.runId,
       originatingAgentId: input.session.originatingAgentId,
+      gatewayTokenId: input.session.gatewayTokenId,
       issueId: input.session.issueId,
       projectId: input.session.projectId,
       gatewayId: input.session.gatewayId ?? null,
@@ -2814,6 +2873,7 @@ export function createToolGatewayService(
     consumeRateLimit?: boolean;
     heartbeatRunId?: string | null;
     originatingAgentId?: string | null;
+    gatewayTokenId?: string | null;
     issueId?: string | null;
     projectId?: string | null;
     gatewayId?: string | null;
@@ -2834,6 +2894,7 @@ export function createToolGatewayService(
         issueId: input.issueId ?? null,
         projectId: input.projectId ?? null,
         gatewayId: input.gatewayId ?? null,
+        gatewayTokenId: input.gatewayTokenId ?? null,
       },
       request: {
         toolName: input.tool.name,
@@ -7386,6 +7447,7 @@ export function createToolGatewayService(
       gatewayName: row.gateway.name,
       gatewayProfileId: row.gateway.profileId,
       gatewayTokenId: row.token.id || tokenId,
+      originatingAgentId: row.token.subjectType === "gateway_client" && row.token.responsibleUserId ? row.token.createdByAgentId : null,
       gatewayTokenAllowedActions: normalizeGatewayTokenActions(
         row.token.allowedActions,
       ),
@@ -7443,7 +7505,7 @@ export function createToolGatewayService(
     const callerGrant = await resolveConnectionGrant(caller, connection, false);
     const targetGrant = await resolveConnectionGrant(session, connection, false);
     if (callerGrant.id !== targetGrant.id) {
-      throw new ToolGatewayHttpError(403, "Tests cannot use another agent's credential identity", "test_credential_identity_mismatch");
+      throw new ToolGatewayHttpError(403, "Delegated calls cannot use another agent's credential identity", session.gatewayTokenId ? "gateway_credential_identity_mismatch" : "test_credential_identity_mismatch");
     }
   }
 
@@ -7454,6 +7516,13 @@ export function createToolGatewayService(
     if (!current.allowed && !(session.approvedInvocationId && current.decision === "require_approval")) {
       throw new ToolGatewayHttpError(403, current.explanation, current.reasonCode);
     }
+    await assertDelegatedTestCredentialAccess(session, tool);
+  }
+
+  async function assertCurrentGatewayIssuer(session: ToolGatewaySession, tool: ToolGatewayDescriptor, parameters: unknown, invocationId: string, approved: boolean) {
+    if (!session.gatewayId || !session.originatingAgentId) return;
+    const current = await policyService.decide(policyInputForTool({ session, tool, parameters }), { admittedInvocationId: invocationId, requiredGatewayAction: "tools/call" });
+    if (!current.allowed && !(approved && current.decision === "require_approval")) throw new ToolGatewayHttpError(policyErrorStatus(current), current.explanation, current.reasonCode);
     await assertDelegatedTestCredentialAccess(session, tool);
   }
 
@@ -8106,6 +8175,16 @@ export function createToolGatewayService(
     session: ToolGatewaySession,
     identityContextId: string | undefined,
   ) {
+    if (session.gatewayTokenId && session.gatewayId) {
+      const [token] = await db.select({ subjectType: toolMcpGatewayTokens.subjectType, issuer: toolMcpGatewayTokens.createdByAgentId, userId: toolMcpGatewayTokens.responsibleUserId })
+        .from(toolMcpGatewayTokens).where(and(eq(toolMcpGatewayTokens.id, session.gatewayTokenId), eq(toolMcpGatewayTokens.companyId, session.companyId), eq(toolMcpGatewayTokens.gatewayId, session.gatewayId)));
+      // Durable delegated clients retain issuer authority across approval.
+      // Board clients and independently run-bound heartbeat clients keep their identity.
+      if (token?.subjectType === "gateway_client" && (token.issuer || token.userId)) {
+        session.originatingAgentId = token.issuer ?? session.originatingAgentId ?? session.actorId;
+        session.responsibleUserId = token.userId;
+      }
+    }
     if (!identityContextId) return;
     const [origin] = await db
       .select()
@@ -8239,7 +8318,8 @@ export function createToolGatewayService(
       gatewayPublicId: invocation.gatewayPublicId,
       gatewayTokenId: invocation.gatewayTokenId,
       actorType: "agent",
-      actorId: invocation.agentId,
+      actorId: invocation.actorType === "agent" ? invocation.actorId ?? invocation.agentId : invocation.agentId,
+      originatingAgentId: typeof invocation.policyExplanation?.delegatedGatewayIssuer === "string" ? invocation.policyExplanation.delegatedGatewayIssuer : invocation.actorType === "agent" && invocation.gatewayId && !invocation.runId && !invocation.gatewayTokenId ? invocation.actorId : null,
       createdAt: new Date(),
       expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS),
     };
@@ -8265,7 +8345,7 @@ export function createToolGatewayService(
           tool,
           parameters: signedPayload.arguments,
         }),
-        { admittedInvocationId: invocation.id },
+        { admittedInvocationId: invocation.id, requiredGatewayAction: "tools/call" },
       );
       if (
         !currentAccess.allowed &&
@@ -8396,6 +8476,7 @@ export function createToolGatewayService(
     });
 
     try {
+      await assertCurrentGatewayIssuer(session, tool, parameters, invocation.id, true);
       const executionTimeoutMs = timeoutMs(APPROVED_EXECUTION_TIMEOUT_MS);
       const result =
         (tool.providerType === "mcp_remote_http" || tool.providerType === "provider_rest")
@@ -10201,6 +10282,7 @@ export function createToolGatewayService(
           agentId: invocation.agentId,
           actorType: "agent",
           actorId: invocation.actorId,
+          originatingAgentId: typeof invocation.policyExplanation?.delegatedGatewayIssuer === "string" ? invocation.policyExplanation.delegatedGatewayIssuer : invocation.actorType === "agent" && invocation.gatewayId && !invocation.runId && !invocation.gatewayTokenId ? invocation.actorId : null,
           gatewayId: invocation.gatewayId,
           gatewayPublicId: invocation.gatewayPublicId,
           gatewayTokenId: invocation.gatewayTokenId,
@@ -10233,7 +10315,7 @@ export function createToolGatewayService(
             tool,
             parameters: signedPayload.arguments,
           }),
-          { admittedInvocationId: invocation.id },
+          { admittedInvocationId: invocation.id, requiredGatewayAction: "tools/call" },
         );
         if (!access.allowed && access.decision !== "require_approval")
           throw new ToolGatewayHttpError(
@@ -10620,12 +10702,13 @@ export function createToolGatewayService(
             "invocation_not_found",
           );
         }
+        const requestingActor = policyInputForTool({ session, tool }).actor;
         if (
           actionRequest.issueId !== session.issueId ||
           storedInvocation.issueId !== session.issueId ||
           storedInvocation.agentId !== session.agentId ||
           storedInvocation.runId !== session.runId ||
-          actionRequest.requestedByAgentId !== session.agentId
+          actionRequest.requestedByAgentId !== (requestingActor.actorType === "agent" ? requestingActor.actorId : null)
         ) {
           throw new ToolGatewayHttpError(
             403,
@@ -11114,6 +11197,7 @@ export function createToolGatewayService(
       });
 
       try {
+        await assertCurrentGatewayIssuer(session, tool, effectiveParameters, invocationId, !!input.approvedActionRequestId);
         const executionTimeoutMs = timeoutMs(input.timeoutMs, tool);
         if (
           tool.providerType === "paperclip_plugin" &&

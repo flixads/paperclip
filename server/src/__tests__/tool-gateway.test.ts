@@ -65,7 +65,8 @@ import {
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
 
-const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
+const externalTestDatabaseUrl = process.env.PAPERCLIP_TOOL_GATEWAY_TEST_DATABASE_URL;
+const embeddedPostgresSupport = externalTestDatabaseUrl ? { supported: true } : await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 const testToolActionSigningSecret = "test-tool-action-signing-secret";
 
@@ -553,8 +554,8 @@ describeEmbeddedPostgres("tool gateway acceptance", () => {
   let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
 
   beforeAll(async () => {
-    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-tool-gateway-");
-    db = createDb(tempDb.connectionString);
+    if (!externalTestDatabaseUrl) tempDb = await startEmbeddedPostgresTestDatabase("paperclip-tool-gateway-");
+    db = createDb(externalTestDatabaseUrl ?? tempDb!.connectionString);
   }, 90_000);
 
   afterEach(async () => {
@@ -592,6 +593,7 @@ describeEmbeddedPostgres("tool gateway acceptance", () => {
   });
 
   afterAll(async () => {
+    await db?.$client.end({ timeout: 1 });
     await tempDb?.cleanup();
   });
 

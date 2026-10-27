@@ -162,7 +162,7 @@ export function createChatActivity(db: Db, options: ChatActivityOptions) {
     });
   }
 
-  async function listActivity(endpointId: string, page?: { limit: number; before?: { createdAt: string; id: string } }, managementContext?: ConnectionManagementContext) {
+  async function readActivity(endpointId: string, page?: { limit: number; before?: { createdAt: string; id: string } }, managementContext?: ConnectionManagementContext) {
     const limit = page ? page.limit + 1 : 100;
     // Match the millisecond precision of the public timestamp and use a UUID
     // tie-breaker so equal timestamps never skip records between pages.
@@ -364,7 +364,7 @@ export function createChatActivity(db: Db, options: ChatActivityOptions) {
       visibleIds = new Set(activityRows.filter(visible).map(row => row.id));
       githubRecoveryScans.forEach(row => visibleIds!.add(row.id));
     }
-    return [
+    const rows = [
       ...deliveries.map((row) => {
         const normalized =
           row.normalizedEvent &&
@@ -582,9 +582,15 @@ export function createChatActivity(db: Db, options: ChatActivityOptions) {
       })),
       ...githubRecoveryScans,
     ]
-      .filter(row => !visibleIds || visibleIds.has(row.id))
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))
-      .slice(0, limit);
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id));
+    return {
+      visible: rows.filter(row => !visibleIds || visibleIds.has(row.id)).slice(0, limit),
+      examined: rows.slice(0, limit),
+    };
+  }
+
+  async function listActivity(endpointId: string, page?: { limit: number; before?: { createdAt: string; id: string } }, managementContext?: ConnectionManagementContext) {
+    return (await readActivity(endpointId, page, managementContext)).visible;
   }
 
   async function listActivityPage(endpointId: string, limit = 25, cursor?: string, managementContext?: ConnectionManagementContext) {
@@ -600,12 +606,14 @@ export function createChatActivity(db: Db, options: ChatActivityOptions) {
         before = { createdAt: value[0], id: value[1] };
       } catch { throw badRequest("Invalid activity cursor"); }
     }
-    const rows = await listActivity(endpointId, { limit, before }, managementContext);
-    const items = rows.slice(0, limit);
-    const last = items.at(-1);
+    const rows = await readActivity(endpointId, { limit, before }, managementContext);
+    const examined = rows.examined.slice(0, limit);
+    const ids = new Set(examined.map(row => row.id));
+    const items = rows.visible.filter(row => ids.has(row.id));
+    const last = examined.at(-1);
     return {
       items,
-      nextCursor: rows.length > limit && last
+      nextCursor: rows.examined.length > limit && last
         ? Buffer.from(JSON.stringify([last.createdAt, last.id])).toString("base64url")
         : null,
     };
