@@ -258,12 +258,28 @@ describe("GitHub App wizard", () => {
     expect(container.textContent).not.toContain("GitHub connected");
     expect(githubChatApi.registration).not.toHaveBeenCalled();
   });
-  it("opens a saved credential-entry handoff without starting another App registration", async () => {
+  it("completes a fresh credential-entry handoff through App import", async () => {
     await render("resume=draft-1&stage=credentials");
     expect(container.querySelector("#github-app-id")).not.toBeNull();
     expect(container.querySelector("#github-webhook-secret")).not.toBeNull();
     expect(githubChatApi.advance).not.toHaveBeenCalled();
     expect(githubChatApi.registration).not.toHaveBeenCalled();
+    const privateKey = "-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----";
+    for (const [selector, value] of [["#github-app-id", "1234"], ["#github-webhook-secret", "human-webhook-secret"]]) {
+      await act(async () => {
+        const input = container.querySelector<HTMLInputElement>(selector)!;
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    }
+    const paste = new Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(paste, "clipboardData", { value: { getData: () => privateKey } });
+    await act(async () => container.querySelector("#github-private-key")!.dispatchEvent(paste));
+    const connect = container.querySelector<HTMLButtonElement>('[aria-label="Connect existing App"]')!;
+    expect(connect.disabled).toBe(false);
+    await act(async () => connect.click());
+    expect(githubChatApi.connectApp).toHaveBeenCalledWith("draft-1", { appId: "1234", privateKey, webhookSecret: "human-webhook-secret" });
+    expect(chatEndpointsApi.setup).not.toHaveBeenCalled();
   });
   it("keeps a saved rotation handoff open through generation and reconnect failures", async () => {
     fixture.endpoint.status = "active";
