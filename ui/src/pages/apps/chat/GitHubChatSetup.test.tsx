@@ -281,6 +281,65 @@ describe("GitHub App wizard", () => {
     expect(githubChatApi.connectApp).toHaveBeenCalledWith("draft-1", { appId: "1234", privateKey, webhookSecret: "human-webhook-secret" });
     expect(chatEndpointsApi.setup).not.toHaveBeenCalled();
   });
+  it.each(["webhookSecret", "clientSecret"])("saves a configured %s handoff without replacing the private key", async (field) => {
+    fixture.endpoint.status = "active";
+    fixture.endpoint.botExternalId = "1234";
+    vi.mocked(chatEndpointsApi.setup).mockResolvedValue(fixture.endpoint);
+    await render(`resume=draft-1&stage=credentials&reconnect=1&credentialFields=${field}&credentialMode=all`);
+    const selector = field === "webhookSecret" ? "#github-webhook-secret" : "#github-client-secret";
+    const input = container.querySelector<HTMLInputElement>(selector);
+    expect(input).not.toBeNull();
+    expect(container.querySelector("#github-private-key")).toBeNull();
+    expect(chatEndpointsApi.setup).not.toHaveBeenCalled();
+    const submit = container.querySelector<HTMLButtonElement>('[aria-label="Verify and reconnect"]')!;
+    expect(submit.disabled).toBe(true);
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "human-replacement");
+      input!.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    expect(submit.disabled).toBe(false);
+    await act(async () => submit.click());
+    expect(chatEndpointsApi.setup).toHaveBeenCalledWith("draft-1", { action: "reconnect", credentials: { [field]: "human-replacement" } });
+    expect(githubChatApi.connectApp).not.toHaveBeenCalled();
+    expect(chatEndpointsApi.generateSetupSecret).not.toHaveBeenCalled();
+  });
+  it.each(["all", "any"])("honors %s completion for combined credential entry", async (mode) => {
+    fixture.endpoint.status = "active";
+    fixture.endpoint.botExternalId = "1234";
+    vi.mocked(chatEndpointsApi.setup).mockResolvedValue(fixture.endpoint);
+    await render(`resume=draft-1&stage=credentials&reconnect=1&credentialFields=privateKey,webhookSecret&credentialMode=${mode}`);
+    const input = container.querySelector<HTMLInputElement>("#github-webhook-secret")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "human-webhook");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const submit = container.querySelector<HTMLButtonElement>('[aria-label="Verify and reconnect"]')!;
+    expect(submit.disabled).toBe(mode === "all");
+    const privateKey = "-----BEGIN PRIVATE KEY-----\nfixture\n-----END PRIVATE KEY-----";
+    if (mode === "all") {
+      const paste = new Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(paste, "clipboardData", { value: { getData: () => privateKey } });
+      await act(async () => container.querySelector("#github-private-key")!.dispatchEvent(paste));
+    }
+    expect(submit.disabled).toBe(false);
+    await act(async () => submit.click());
+    expect(chatEndpointsApi.setup).toHaveBeenCalledWith("draft-1", { action: "reconnect", credentials: {
+      webhookSecret: "human-webhook", ...(mode === "all" ? { appId: "1234", privateKey } : {}),
+    } });
+  });
+  it("keeps legacy credential-entry links usable with only a webhook replacement", async () => {
+    fixture.endpoint.status = "active";
+    fixture.endpoint.botExternalId = "1234";
+    vi.mocked(chatEndpointsApi.setup).mockResolvedValue(fixture.endpoint);
+    await render("resume=draft-1&stage=credentials&reconnect=1");
+    const input = container.querySelector<HTMLInputElement>("#github-webhook-secret")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, "human-webhook");
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => container.querySelector<HTMLButtonElement>('[aria-label="Verify and reconnect"]')!.click());
+    expect(chatEndpointsApi.setup).toHaveBeenCalledWith("draft-1", { action: "reconnect", credentials: { webhookSecret: "human-webhook" } });
+  });
   it("keeps a saved rotation handoff open through generation and reconnect failures", async () => {
     fixture.endpoint.status = "active";
     fixture.endpoint.botExternalId = "1234";

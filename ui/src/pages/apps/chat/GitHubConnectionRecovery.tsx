@@ -31,7 +31,9 @@ export function GitHubConnectionRecoveryNotice({ endpoint }: { endpoint: ChatEnd
   );
 }
 
-export type GitHubAppCredentials = { appId: string; privateKey: string; webhookSecret: string };
+export const GITHUB_APP_CREDENTIAL_FIELDS = ["privateKey", "webhookSecret", "clientSecret"] as const;
+export type GitHubAppCredentialField = typeof GITHUB_APP_CREDENTIAL_FIELDS[number];
+export type GitHubAppCredentials = { appId: string; privateKey: string; webhookSecret: string; clientSecret?: string };
 
 function CredentialLabel({ id, label, help }: { id: string; label: string; help: string }) {
   return <div className="flex items-center gap-1.5">
@@ -42,15 +44,17 @@ function CredentialLabel({ id, label, help }: { id: string; label: string; help:
   </div>;
 }
 
-export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = false, rotationAlreadyCommitted = false, onConnect, onExit }: {
+export function GitHubAppRecovery({ endpoint, reconnect, credentialFields, requireAllCredentialFields = false, rotateWebhookSecret = false, rotationAlreadyCommitted = false, onConnect, onExit }: {
   endpoint: ChatEndpoint;
   reconnect: boolean;
+  credentialFields?: readonly GitHubAppCredentialField[];
+  requireAllCredentialFields?: boolean;
   rotateWebhookSecret?: boolean;
   rotationAlreadyCommitted?: boolean;
   onConnect: (credentials?: GitHubAppCredentials) => Promise<void>;
   onExit: () => void;
 }) {
-  const [replace, setReplace] = useState(!reconnect);
+  const [replace, setReplace] = useState(!!credentialFields || !reconnect);
   const [credentials, setCredentials] = useState<GitHubAppCredentials>({ appId: endpoint.botExternalId ?? "", privateKey: "", webhookSecret: "" });
   const [privateKeyDraft, setPrivateKeyDraft] = useState("");
   const [pending, setPending] = useState(false);
@@ -59,12 +63,17 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
   const [rotationSecret, setRotationSecret] = useState("");
   const [rotationGeneration, setRotationGeneration] = useState<string | null>(null);
   const [rotationUncertain, setRotationUncertain] = useState(false);
-  const needsWebhookSecret = !reconnect && !["active", "paused", "revoked"].includes(endpoint.status);
+  const needsPrivateKey = !credentialFields || credentialFields.includes("privateKey");
+  const needsWebhookSecret = credentialFields ? credentialFields.includes("webhookSecret") : !reconnect && !["active", "paused", "revoked"].includes(endpoint.status);
   const appName = endpoint.botLabel ?? endpoint.setup?.github?.appName ?? "your existing App";
   const appIdInvalid = !!credentials.appId.trim() && !/^\d+$/.test(credentials.appId.trim());
   const keyInvalid = !!credentials.privateKey.trim() && !/-----BEGIN (?:RSA )?PRIVATE KEY-----/.test(credentials.privateKey);
   const keyLoaded = !!credentials.privateKey.trim() && !keyInvalid && !privateKeyDraft;
-  const incomplete = replace && (!credentials.appId.trim() || !credentials.privateKey.trim() || appIdInvalid || keyInvalid || (needsWebhookSecret && !credentials.webhookSecret.trim()));
+  const incomplete = credentialFields
+    ? !credentialFields.length || appIdInvalid || keyInvalid || (requireAllCredentialFields
+      ? credentialFields.some(field => !credentials[field]?.trim())
+      : credentialFields.every(field => !credentials[field]?.trim()))
+    : replace && (!credentials.appId.trim() || !credentials.privateKey.trim() || appIdInvalid || keyInvalid || (needsWebhookSecret && !credentials.webhookSecret.trim()));
   const actionLabel = pending ? "Checking GitHub…" : replace ? (reconnect ? "Verify and reconnect" : "Connect existing App") : "Reconnect saved App";
   async function connect() {
     setPending(true);
@@ -132,7 +141,7 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
       <p className="break-words">{error}</p>
       <p>{rotateWebhookSecret ? "Use the newest secret in GitHub App settings, then retry reconnecting after GitHub verifies delivery." : "Try again if the service is temporarily unavailable. If GitHub rejected the saved key, replace the credentials for this same App below."}</p>
     </div>}
-    {reconnect && !rotateWebhookSecret && <Button variant="link" className="h-auto p-0" disabled={pending} onClick={() => { setReplace(!replace); setError(""); }}>
+    {reconnect && !rotateWebhookSecret && !credentialFields && <Button variant="link" className="h-auto p-0" disabled={pending} onClick={() => { setReplace(!replace); setError(""); }}>
       {replace ? "Use saved credentials instead" : "Replace App credentials…"}
     </Button>}
     {replace && <div className="space-y-6">
@@ -140,14 +149,15 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
         <h2 className="text-base font-semibold">{reconnect ? "Replace credentials for the same App" : "Connect your existing GitHub App"}</h2>
         <p><a href={gitHubAppSettingsUrl(endpoint)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 underline">Open GitHub App settings<ExternalLink className="size-3.5" /></a> and choose <strong>{appName}</strong>.</p>
         <p className="text-muted-foreground">If it’s owned by an organization, open that organization’s Settings → Developer settings → GitHub Apps → Edit. You’ll need permission to manage the App.</p>
+        {credentialFields && <p className="text-muted-foreground">Enter the requested credentials below. Other saved credentials stay in place.</p>}
       </div>
-      <div className="space-y-2">
+      {needsPrivateKey && <div className="space-y-2">
         <CredentialLabel id="github-app-id" label="App ID" help="The numeric App ID on the GitHub App’s settings page. This is different from its Client ID or installation ID." />
         <p id="github-app-id-help" className="text-sm text-muted-foreground">Copy <strong>App ID</strong> from the App’s settings page. {reconnect && "The saved ID is filled in when available."}</p>
         <Input id="github-app-id" aria-describedby="github-app-id-help" inputMode="numeric" value={credentials.appId} disabled={pending} aria-invalid={appIdInvalid} onChange={event => setCredentials({ ...credentials, appId: event.target.value })} />
         {appIdInvalid && <p role="alert" className="text-sm text-destructive">Use the numeric App ID, not the Client ID.</p>}
-      </div>
-      <div className="space-y-2">
+      </div>}
+      {needsPrivateKey && <div className="space-y-2">
         <CredentialLabel id="github-private-key" label="Private key" help="Upload the .pem file downloaded from this GitHub App, or paste its entire contents, including the BEGIN and END lines." />
         <ol id="github-private-key-help" className="list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
           <li>In the same App’s settings, open <strong>Credentials → Key pairs → New key</strong>. On the older settings page, use <strong>Private keys → Generate a private key</strong>.</li>
@@ -171,11 +181,15 @@ export function GitHubAppRecovery({ endpoint, reconnect, rotateWebhookSecret = f
         {keyInvalid && <p role="alert" className="text-sm text-destructive">Use a PEM private key, including its BEGIN and END lines. A token or client secret won’t work here.</p>}
         {fileError && <p role="alert" className="text-sm text-destructive">{fileError}</p>}
         <a className="inline-flex items-center gap-1 text-sm underline" href="https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/managing-private-keys-for-github-apps" target="_blank" rel="noreferrer">GitHub’s private key instructions<ExternalLink className="size-3.5" /></a>
-      </div>
+      </div>}
       {needsWebhookSecret && <div className="space-y-2">
         <CredentialLabel id="github-webhook-secret" label="Webhook secret" help="The secret configured for this App’s webhook. It must match GitHub exactly." />
         <p className="text-sm text-muted-foreground">Use the secret saved when you configured this App’s webhook. If you no longer have it, change the webhook secret in GitHub App settings and enter the same value here.</p>
         <Input id="github-webhook-secret" type="password" autoComplete="off" disabled={pending} value={credentials.webhookSecret} onChange={event => setCredentials({ ...credentials, webhookSecret: event.target.value })} />
+      </div>}
+      {credentialFields?.includes("clientSecret") && <div className="space-y-2">
+        <CredentialLabel id="github-client-secret" label="Client secret" help="The client secret for this GitHub App’s user authentication. Leave the saved private key in place." />
+        <Input id="github-client-secret" type="password" autoComplete="off" disabled={pending} value={credentials.clientSecret ?? ""} onChange={event => setCredentials({ ...credentials, clientSecret: event.target.value })} />
       </div>}
     </div>}
     <SetupWizardFooter onSaveExit={onExit} disabled={pending}>
