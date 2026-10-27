@@ -797,6 +797,20 @@ fit the compacted bound produces a diagnostic; the event stream continues.
 Tool output and error fields have reserved retention space and size records,
 so large input values cannot consume their output tails or make excerpts look
 complete. A separator split between reads does not count against the frame limit.
+### OpenCode MCP tool results
+
+The Runner-owned MCP bridge sends complete JSON tool results up to 1 MiB of
+UTF-8 output. It does not slice JSON text. This includes the native server's
+bounded 500 KB app-tool results and saved-result pages. OpenCode can put a long
+result in its own output file; that file must still contain the complete JSON.
+The existing `read_tool_result` artifact protocol handles larger app results.
+
+Serialization has a bounded traversal budget and checks escaped UTF-8 output.
+If delivery exceeds the limit, the bridge reports an error without a partial
+success value. The action may already have completed. Reconcile its saved
+result or receipt instead of repeating it. Replaying the same MCP call identity
+reuses the original handler execution, including when delivery failed.
+
 ## Preconfigured home
 
 Set `homeMode: "preconfigured"` in a `paperclip_runner` agent's adapter config
