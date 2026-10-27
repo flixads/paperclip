@@ -8,7 +8,7 @@ const postgres = process.env.DRIVER_FORMAT === "cjs"
 const mode = process.env.RECOVERY_CASE;
 const closed = Promise.withResolvers();
 const sql = postgres(process.env.TEST_DATABASE_URL, {
-  max: mode === "no-pipeline-fairness" ? 2 : 1,
+  max: mode === "no-pipeline" || mode === "no-pipeline-fairness" ? 2 : 1,
   max_pipeline: mode?.startsWith("no-pipeline") ? 0 : 1,
   connection: { application_name: `driver-recovery-${mode}` },
   backoff: 0,
@@ -46,11 +46,15 @@ try {
     try {
       await control.unsafe("select pg_advisory_lock(900001), pg_advisory_lock(900002)");
       const waitForBlocked = async (count) => {
-        while (true) {
+        const deadline = performance.now() + 5000;
+        let observed = 0;
+        while (performance.now() < deadline) {
           const [row] = await control.unsafe("select count(*)::int as count from pg_stat_activity where application_name=$1 and wait_event='advisory'", [`driver-recovery-${mode}`]);
+          observed = row.count;
           if (row.count === count) return;
           await setImmediate();
         }
+        throw new Error(`Expected ${count} advisory lock waits; observed ${observed}`);
       };
       let firstFinished = false;
       first = sql.unsafe(query, [900001]).then(() => { firstFinished = true; });
@@ -60,12 +64,12 @@ try {
       fast = sql.unsafe(lookup, [42]).then((rows) => rows);
       await control.unsafe("select pg_advisory_unlock(900002)");
       assert.equal((await fast)[0].value, 42);
-      assert.equal(firstFinished, false, "lookup must use the free connection while unrelated work stays blocked");
+      assert.equal(firstFinished, false, "lookup must progress after one pool connection is released while the other stays blocked");
     } finally {
       await control.unsafe("select pg_advisory_unlock_all()");
       await Promise.allSettled([first, second, fast].filter(Boolean));
     }
-  } else if (mode === "no-pipeline") {
+  } else if (mode === "no-pipeline" || mode === "no-pipeline-single") {
     await sql.begin(async (tx) => {
       await tx.unsafe("insert into connection_recovery_probe values (1)");
       const results = await Promise.all([
@@ -74,7 +78,6 @@ try {
       ]);
       assert.deepEqual(results[0].map((row) => row.id), [1]);
       assert.equal(results[1][0].count, 1);
-      // The separate connection cannot see the uncommitted insert.
       assert.equal((await control.unsafe("select count(*)::int as count from connection_recovery_probe"))[0].count, 0);
     });
     await assert.rejects(sql.begin(async (tx) => {

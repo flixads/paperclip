@@ -21,7 +21,7 @@ describe.skipIf(!support.supported)("postgres connection recovery", () => {
   afterAll(async () => { await database?.cleanup(); });
 
   for (const format of ["esm", "cjs"]) {
-    for (const scenario of ["no-pipeline", "no-pipeline-fairness"]) {
+    for (const scenario of ["no-pipeline-single", "no-pipeline", "no-pipeline-fairness"]) {
       it(`${format}: ${scenario} preserves connection ownership and progress`, async () => {
         const { stdout, stderr } = await run(process.execPath, [fixture], {
           env: {
