@@ -76,12 +76,18 @@ describe("OpenCode MCP bridge", () => {
     const result = { responseText: { nextOffsetBytes: 300_000, totalBytes: 600_000 }, data: chunk.repeat(25_000) };
     expect(Buffer.byteLength(JSON.stringify(result))).toBeLessThanOrEqual(500_000);
     expect(Buffer.byteLength(JSON.stringify(result))).toBeGreaterThan(64 * 1024);
+    // The driver returns a controller text item, not the raw app page. Its
+    // encoded JSON must survive a second layer of escaping at this boundary.
+    const controllerResult = { text: JSON.stringify(result), type: "inputText" };
+    expect(Buffer.byteLength(JSON.stringify(controllerResult))).toBeGreaterThan(500_000);
     const bridge = await startOpenCodeMcpBridge({
-      tools: [{ name: "read_tool_result", inputSchema: { type: "object" } }], handler: async () => result,
+      tools: [{ name: "read_tool_result", inputSchema: { type: "object" } }], handler: async () => controllerResult,
     });
     bridges.push(bridge);
     const response = await (await rpc(bridge, { id: "page", method: "tools/call", params: { name: "read_tool_result", arguments: {} } })).json() as { result: { content: Array<{ text: string }> } };
-    expect(JSON.parse(response.result.content[0]!.text)).toEqual(result);
+    const delivered = JSON.parse(response.result.content[0]!.text) as typeof controllerResult;
+    expect(delivered).toEqual(controllerResult);
+    expect(JSON.parse(delivered.text)).toEqual(result);
   });
 
   it.each([
