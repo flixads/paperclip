@@ -168,9 +168,9 @@ Gaps: No GET event stream is implemented. This entry does not advertise a usable
 
 API: `present` — `POST /mcp/gateways/{gatewayPublicId}`; browser/provider/MCP protocol.
 Agent access: `available` — existing authenticated MCP/provider protocol; not callable as JSON REST.
-Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority.
+Policy: Provider state/signature or gateway-token verification, company and resource binding; browser returns require the configuring human. Agent-issued durable gateway tokens retain both issuer and responsible-user authority. Issuer and target Block/Ask first/rate decisions intersect using the existing evaluator; credentials must select the same identity. Human continuation rechecks current token actions, scope, grants and both policies. Approval attribution records the issuer independently of the target; deleted tokens fail closed. Board clients and run-bound heartbeat clients retain their separate behavior.
 Evidence: `verified` — [route](../../server/src/routes/tool-gateway.ts); reviewed in the working tree based on the source commit above. [Authenticated fixtures](../../server/src/__tests__/connection-management.integration.test.ts) passed with database persistence and actual bearer/session middleware.
-Verification: `passed` — local assembled server and actual gateway-token authentication. Durable clients survive setup-run completion, honor purpose scopes, and reject revoked user/issuer authority and a cleared issuer foreign key. No live provider qualification.
+Verification: `passed` — local assembled server and actual gateway-token authentication. Durable clients survive setup-run completion, honor purpose scopes, and reject revoked user/issuer authority and a cleared issuer foreign key. Thirteen actual-auth cases additionally verify issuer/target Block, governed approval, current policy/grant/token revocation and deletion, narrowed actions, independent/shared rates, credential identity and board-issued approval compatibility. No live provider qualification.
 Gaps: Provider fixtures do not qualify live provider setup or availability.
 
 ### `get-tool-gateway-gateways-mcp`

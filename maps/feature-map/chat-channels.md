@@ -221,4 +221,6 @@ Sources: Source: [TaskChatBubble.tsx](../../ui/src/components/task-chat/TaskChat
 Shared recipes name provider checks; each provider transport/thread/identity/file-size/type combination needs separate live evidence and deeper instructions.
 ### `delegated-configuration`
 
+Endpoint activity hides private-task events while retaining a next-page cursor across private-only windows, so older readable history stays reachable. Actual-JWT fixtures verify this separately from live provider delivery.
+
 See the canonical [delegated configuration guidance and acceptance evidence](connection-setup.md#delegated-configuration).

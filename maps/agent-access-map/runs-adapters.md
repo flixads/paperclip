@@ -402,9 +402,9 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 API: `present` — `POST /api/companies/{companyId}/ai-connections/local/check`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
 Policy: `tools:manage_connections`; explicitly supplying ownership, `agentIds`, or `allAgents` also requires `tools:manage_profiles`. [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/ai-connections.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Evidence: `verified` — [route](../../server/src/routes/ai-connections.ts) and [actual-auth native receipt fixture](../../server/src/__tests__/connection-management.integration.test.ts), with real database persistence.
+Verification: `passed` — production native call_api with actual run JWT and a deterministic browser-login process returns device URL/code inline, encrypts the mutation receipt, replays exactly, redacts history, and creates no runner response asset. Login start/check/cancel use the real service and persisted addressed-user attempt.
+Gaps: The browser process is a fixture; no real provider consent, CLI credentials or live setup is qualified.
 
 ### `delete-companies-ai-connections-local-attempts`
 

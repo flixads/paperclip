@@ -840,10 +840,10 @@ Gaps: This individual operation has source review but no recorded HTTP verificat
 
 API: `present` — `GET /api/chat-endpoints/{endpointId}/activity`; JSON REST.
 Agent access: `available` — agent REST and default native `search_api` / `call_api`.
-Policy: `tools:view_audit`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Resolved resources and every affected target are checked; personal ownership remains the responsible user.
-Evidence: `source-only` — [route](../../server/src/routes/chat-channels.ts); reviewed in the working tree based on the source commit above.
-Verification: `not-run` — individual operation not executed in this audit; shared authorization and representative family flows are exercised by the authenticated integration suite. Follow the route schema, inspect persistence/audit, and assert owner, scope and revoked-authority denial.
-Gaps: This individual operation has source review but no recorded HTTP verification. Provider availability and live setup remain unqualified.
+Policy: `tools:view_audit`; [shared management policy](../../doc/plans/2026-10-13-connection-api-parity.md#authorization-contract). Current task visibility applies to every returned event. Cursors advance over bounded examined candidates, including private-only windows; private event details remain filtered.
+Evidence: `verified` — [actual-JWT regression](../../server/src/__tests__/connection-management.integration.test.ts) through the assembled server and real database.
+Verification: `passed` — a private-only first page retains a cursor; the next reaches three readable older events after 27 private events, including tied timestamps. The page-bounded per-task authorization regression remains green.
+Gaps: Deterministic database/provider fixtures do not qualify live provider setup or availability.
 
 ### `post-chat-endpoints-deliveries-replay`
 

@@ -66,7 +66,7 @@ Manual: Create a bounded profile, choose its offered tools and options, save or 
 ## Gotchas
 
 - A copied endpoint is not proof of client authentication or tool discovery.
-- Gateway access cannot replace underlying connection/action permission checks.
+- Gateway access cannot replace underlying connection/action permission checks. Agent-issued clients retain the issuer and responsible user; issuer and target Block, Ask first and rate policies intersect, including after approval. Revoked or narrowed token authority stops continuation.
 - Advanced tool routes require the appropriate admin gate; legacy tool URLs may redirect.
 
 ### Storybook verification
