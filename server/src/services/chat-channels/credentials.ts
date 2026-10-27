@@ -82,6 +82,7 @@ type ChatCredentialsOptions = {
   redactError: (error: unknown) => string;
   credentialFingerprint: (refs: ToolCredentialSecretRef[]) => string;
   verifyPhotonCredentials: ReturnType<typeof createPhotonCredentialChecks>["verifyPhotonCredentials"];
+  preservesWebhookVerification?: (endpoint: EndpointRow, setup: EndpointRow["setup"], credentials: Record<string, string>) => boolean;
 };
 export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
   const { secrets, PROVIDER_LABELS, REQUIRED_CREDENTIALS, PROVIDER_CREDENTIAL_CHECK_TIMEOUT_MS, fetchImpl, redactError, credentialFingerprint, verifyPhotonCredentials } = options;
@@ -381,7 +382,11 @@ export function createChatCredentials(db: Db, options: ChatCredentialsOptions) {
           .where(eq(toolConnections.id, endpoint.connectionId));
         if (changedFields.length) {
           await notifyChatEndpointWork(tx, endpoint.connectionId);
+          const [currentEndpoint] = await tx.select({ setup: chatEndpoints.setup }).from(chatEndpoints)
+            .where(and(eq(chatEndpoints.id, endpoint.id), eq(chatEndpoints.companyId, endpoint.companyId))).for("update");
+          if (!currentEndpoint) throw notFound("Chat endpoint not found");
           const verification = changedFields.some(field => field === "signingSecret" || field === "webhookSecret")
+            && !options.preservesWebhookVerification?.(endpoint, currentEndpoint.setup, credentials)
             ? { webhookVerifiedAt: null } : {};
           await tx.update(chatEndpoints).set({
             // Fence old healthy state in the same transaction as the new refs.

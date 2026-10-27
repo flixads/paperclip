@@ -9,9 +9,7 @@ import { createGitHubAppSetup } from "./github/app-setup.js";
 
 import type { VerifiedProviderIdentity } from "./runtime-types.js";
 
-import { isProvisionedSlackSetup } from "@paperclipai/shared";
-
-import { slackCallbackMatchesPublicUrl } from "./slack/callback-verification.js";
+import { preservesProvisionedSlackVerification } from "./slack/callback-verification.js";
 
 import { createDiscordCommands } from "./discord/commands.js";
 
@@ -28,9 +26,6 @@ import { chatCredentialMutationLease, type CredentialMutationLeaseGuard } from "
 
 import { slackChatRegistrationService } from "../chat-slack-registration.js";
 
-import {
-  createHash,
-} from "node:crypto";
 import {
   and,
   eq,
@@ -96,6 +91,7 @@ type ChatConfigurationOptions = Pick<ReturnType<typeof createChatCredentials>, "
   leasedChatProvider: (provider: string) => boolean;
   PROVIDER_LABELS: Record<ChatProvider, string>;
   SUPPLIED_CREDENTIAL_KEYS: Record<ChatProvider, readonly string[]>;
+  RECONNECT_CREDENTIAL_KEYS?: Partial<Record<ChatProvider, readonly string[]>>;
   PROVIDER_CREDENTIAL_CHECK_TIMEOUT_MS: number;
   isSupportedTelegramWebhookBaseUrl: (url: string | null) => boolean;
   slackRegistration: Pick<ReturnType<typeof slackChatRegistrationService>, "cleanup">;
@@ -129,7 +125,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
         input.action === "configure" || input.action === "reconnect";
       const allowedKeys = new Set(
         credentialAction
-          ? SUPPLIED_CREDENTIAL_KEYS[record.endpoint.provider]
+          ? (input.action === "reconnect" ? options.RECONNECT_CREDENTIAL_KEYS?.[record.endpoint.provider] : undefined) ?? SUPPLIED_CREDENTIAL_KEYS[record.endpoint.provider]
           : [],
       );
       const unsupportedKeys = suppliedCredentialKeys.filter(
@@ -798,10 +794,7 @@ export function createChatConfiguration(db: Db, options: ChatConfigurationOption
         if (endpoint.provider === "speko") {
         await installSpekoVoiceTools(tx, endpoint, actorUserId);
       }
-        const observedSlackUrl = (current.setup as InternalSetupState).slackCallbackSurfaces?.events?.url;
-        const preserveSlackVerification = isProvisionedSlackSetup(current.setup.slackSetupMethod)
-          && (current.setup as InternalSetupState).slackVerificationSigningFingerprint === createHash("sha256").update(credentials.signingSecret ?? "").digest("hex")
-          && Boolean(observedSlackUrl && slackCallbackMatchesPublicUrl(observedSlackUrl, `${getWebhookPublicBaseUrl()}/api/chat-webhooks/${endpoint.publicId}/slack`));
+        const preserveSlackVerification = preservesProvisionedSlackVerification(current.setup, credentials.signingSecret ?? "", `${getWebhookPublicBaseUrl()}/api/chat-webhooks/${endpoint.publicId}/slack`);
         await notifyChatEndpointWork(tx, endpoint.connectionId);
         await tx
           .update(chatEndpoints)

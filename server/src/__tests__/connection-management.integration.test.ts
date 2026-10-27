@@ -682,6 +682,9 @@ describe("connection management with production default agents", () => {
           requiredUserAction: { kind: "enter_credentials", userId: f.userId, resource: { id: created.body.id } } } });
         expect(JSON.stringify(handoff.body)).not.toContain(chosen);
         expect(handoff.body.requiredUserAction.setupPath).toContain("stage=credentials&reconnect=1");
+        const entryLink = new URL(handoff.body.requiredUserAction.setupPath, server.apiUrl);
+        expect.soft(entryLink.searchParams.get("credentialFields")).toBe("signingSecret");
+        expect.soft(entryLink.searchParams.get("credentialMode")).toBe("all");
         if (token === f.jwt) {
           if (credentialIntentId) expect(handoff.body.interactionId).toBe(credentialIntentId);
           credentialIntentId = handoff.body.interactionId;
@@ -828,6 +831,9 @@ describe("connection management with production default agents", () => {
       const privateKeyHandoff = await f.request("POST", `/chat-endpoints/${created.body.id}/setup`, { action: "configure", credentials: { privateKey } }, f.jwt);
       expect.soft(privateKeyHandoff, JSON.stringify(privateKeyHandoff)).toMatchObject({ status: 200, body: { requiredUserAction: { kind: "enter_credentials" } } });
       if (privateKeyHandoff.status === 200) {
+        const entryLink = new URL(privateKeyHandoff.body.requiredUserAction.setupPath, server.apiUrl);
+        expect.soft(entryLink.searchParams.get("credentialFields")).toBe("privateKey");
+        expect.soft(entryLink.searchParams.get("credentialMode")).toBe("all");
         expect(privateKeyHandoff.body.interactionId).not.toBe(importHandoff.body.interactionId);
         const retry = await f.request("POST", `/chat-endpoints/${created.body.id}/setup`, { action: "configure", credentials: { privateKey } }, f.jwt);
         expect(retry.body.interactionId).toBe(privateKeyHandoff.body.interactionId);
@@ -855,6 +861,35 @@ describe("connection management with production default agents", () => {
       const [endpoint] = await server.db.select().from(chatEndpoints).where(eq(chatEndpoints.id, created.body.id));
       await server.db.update(chatEndpoints).set({ status: "active", setup: { ...endpoint.setup, webhookVerifiedAt: new Date().toISOString() } }).where(eq(chatEndpoints.id, endpoint.id));
       await server.db.update(toolConnections).set({ status: "active", enabled: true, healthStatus: "healthy" }).where(eq(toolConnections.id, created.body.connectionId));
+      const credentialHandoff = await f.request("POST", `/chat-endpoints/${created.body.id}/setup`, { action: "reconnect", credentials: { webhookSecret: "agent-chosen-key" } }, f.jwt);
+      expect(credentialHandoff).toMatchObject({ status: 200, body: { requiredUserAction: { kind: "enter_credentials" } } });
+      const entryLink = new URL(credentialHandoff.body.requiredUserAction.setupPath, server.apiUrl);
+      expect(entryLink.searchParams.get("reconnect")).toBe("1");
+      expect.soft(entryLink.searchParams.get("credentialFields")).toBe("webhookSecret");
+      expect.soft(entryLink.searchParams.get("credentialMode")).toBe("all");
+      const entryOptionsResponse = await humanRequest(`/api/connection-intents/${credentialHandoff.body.interactionId}/setup-options`);
+      const entryOptions = await entryOptionsResponse.json();
+      expect.soft(entryOptions.chatSetup.path).toBe(credentialHandoff.body.requiredUserAction.setupPath);
+      const [entryIntent] = await server.db.select().from(issueThreadInteractions).where(eq(issueThreadInteractions.id, credentialHandoff.body.interactionId));
+      const [entryTask] = await server.db.select().from(issues).where(eq(issues.id, f.issueId));
+      expect(await findSatisfiedToolConnection(server.db, entryTask, entryIntent)).toBeNull();
+      const repairedResponse = await humanRequest(`/api/chat-endpoints/${created.body.id}/setup`, "POST", { action: "reconnect", credentials: { webhookSecret: "human-replacement-webhook" } });
+      expect(repairedResponse.status).toBe(200);
+      const [repairedConnection] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
+      for (const [field, value] of [["privateKey", privateKey], ["clientSecret", "fixture-secret"], ["webhookSecret", "human-replacement-webhook"]]) {
+        const ref = repairedConnection.credentialSecretRefs.find(ref => ref.configPath === `credentials.${field}`)!;
+        expect(await secretService(server.db).resolveSecretValue(f.companyId, ref.secretId, "latest", {
+          accessContext: { consumerType: "system", consumerId: "integration-fixture", actorType: "system" },
+        })).toBe(value);
+      }
+      expect(await findSatisfiedToolConnection(server.db, entryTask, entryIntent)).toBeNull();
+      const [repairedEndpoint] = await server.db.select().from(chatEndpoints).where(eq(chatEndpoints.id, created.body.id));
+      expect(repairedEndpoint.setup.webhookVerifiedAt).toBeNull();
+      await server.db.update(chatEndpoints).set({ status: "active" }).where(eq(chatEndpoints.id, created.body.id));
+      await server.db.update(toolConnections).set({ status: "active", enabled: true, healthStatus: "healthy" }).where(eq(toolConnections.id, created.body.connectionId));
+      expect(await findSatisfiedToolConnection(server.db, entryTask, entryIntent)).toBeNull();
+      await server.db.update(chatEndpoints).set({ setup: { ...repairedEndpoint.setup, webhookVerifiedAt: new Date().toISOString() } }).where(eq(chatEndpoints.id, created.body.id));
+      expect((await findSatisfiedToolConnection(server.db, entryTask, entryIntent))?.id).toBe(created.body.connectionId);
       const [beforeRotation] = await server.db.select().from(toolConnections).where(eq(toolConnections.id, created.body.connectionId));
       let rotationIntentId = "";
       for (const token of [f.key.token, f.jwt, f.jwt]) {
