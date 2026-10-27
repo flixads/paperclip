@@ -117,7 +117,7 @@ export function chatChannelRoutes(db: Db, options: ChatChannelRouteOptions) {
     const previousRotationId = handoff ? handoff.previousRotationId : chatCredentialRotationId(endpoint.setup);
     return { status: "needs_user_action", interactionId, endpointId: endpoint.id, connectionId: endpoint.connectionId,
       ...requiredConnectionUserAction(req, { type: "chat_endpoint", id: endpoint.id, companyId: endpoint.companyId },
-        savedChatSetupPath(company!.prefix, endpoint, action, previousRotationId), reason, kind),
+        savedChatSetupPath(company!.prefix, endpoint, action, previousRotationId, { fields: options.credentialFields, requireAll: !!options.credentialFields }), reason, kind),
     };
   }
 

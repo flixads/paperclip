@@ -73,7 +73,7 @@ export function chatCredentialRotationId(setup: object): string | null {
   return typeof value === "string" && isUuidLike(value) ? value : null;
 }
 
-export function savedChatSetupPath(prefix: string, endpoint: { id: string; provider: string; status?: string; botExternalId?: string | null; providerAccountId?: string | null }, action?: SavedChatSetup["action"], previousRotationId?: string | null) {
+export function savedChatSetupPath(prefix: string, endpoint: { id: string; provider: string; status?: string; botExternalId?: string | null; providerAccountId?: string | null }, action?: SavedChatSetup["action"], previousRotationId?: string | null, credentialRequest?: { fields?: string[]; requireAll?: boolean }) {
   const query = new URLSearchParams({ provider: endpoint.provider, resume: endpoint.id });
   if (action === "enter_credentials" || action === "rotate_credentials") query.set("stage", "credentials");
   const configured = endpoint.status !== "draft" && (
@@ -82,6 +82,11 @@ export function savedChatSetupPath(prefix: string, endpoint: { id: string; provi
   if (action === "enter_credentials" && configured) query.set("reconnect", "1");
   if (action === "confirm_identity") query.set("stage", "identity");
   if (action === "rotate_credentials") { query.set("reconnect", "1"); query.set("rotateSecret", "1"); query.set("afterRotationId", previousRotationId ?? "none"); }
+  if (action === "enter_credentials") {
+    const fields = CHAT_HUMAN_CREDENTIAL_FIELDS.filter(field => !credentialRequest?.fields || credentialRequest.fields.includes(field));
+    query.set("credentialFields", fields.join(","));
+    query.set("credentialMode", credentialRequest?.requireAll ? "all" : "any");
+  }
   return `/${encodeURIComponent(prefix)}/apps/chat/connect?${query}`;
 }
 
@@ -938,7 +943,10 @@ export function connectionIntentService(db: Db) {
       return { version: 1, interaction: loaded.interaction, requestedAgentId: payload.requestingAgentId, existingConnections: [],
         service: { service: payload.serviceSlug, name: payload.serviceName, description: null, logoUrl: null, methods: [], state: "needs_user_action", connectionId: endpoint.connectionId },
         chatSetup: { endpointId: endpoint.id, connectionId: endpoint.connectionId,
-          path: savedChatSetupPath(company!.prefix, endpoint, payload.savedSetup.action, payload.savedSetup.credentialRotation?.previousId) },
+          path: savedChatSetupPath(company!.prefix, endpoint, payload.savedSetup.action, payload.savedSetup.credentialRotation?.previousId, {
+            fields: payload.savedSetup.credentialEntry ? Object.keys(payload.savedSetup.credentialEntry.previousGenerations) : undefined,
+            requireAll: payload.savedSetup.credentialEntry?.requireAll,
+          }) },
       };
     }
     const app = await resolveService(payload.serviceSlug, loaded.issue.companyId, loaded.interaction.addresseeUserId!, payload.requestingAgentId, payload.purpose);
