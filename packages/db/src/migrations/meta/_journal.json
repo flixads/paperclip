@@ -2644,8 +2644,15 @@
     {
       "idx": 379,
       "version": "7",
-      "when": 1793049872763,
-      "tag": "0379_simple_energizer",
+      "when": 1793049353756,
+      "tag": "0379_white_giant_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 380,
+      "version": "7",
+      "when": 1793060791724,
+      "tag": "0380_broken_aqueduct",
       "breakpoints": true
     }
   ]
